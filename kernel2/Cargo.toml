@@ -1,0 +1,32 @@
+[package]
+name = "spacegate-kernel2"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+readme = "../README.md"
+
+[lib]
+name = "spacegate_kernel2"
+path = "src/lib.rs"
+
+[dependencies]
+hyper = { version = "1" }
+http-body-util = { version = "0" }
+tower-service = { version = "0.3.2" }
+tower-layer = { version = "0.3.2" }
+tower = { version = "0.4.13", features = ["full"]}
+pin-project-lite = { version = "0.2.13" }
+
+# serde
+serde = { version = "1", features = ["derive"]}
+serde_regex = "1.1.0"
+http-serde = "2.0.0"
+
+tardis = { workspace = true }
