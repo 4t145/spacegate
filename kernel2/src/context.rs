@@ -1,9 +1,9 @@
-use std::{fmt, collections::HashMap};
+use std::{fmt, collections::HashMap, sync::Arc};
 use hyper::{http, Response};
 use serde::{Serialize, Deserialize};
 use tardis::{basic::{error::TardisError, result::TardisResult}, log, url::Url};
 
-use crate::{SgResponse, SgBody};
+use crate::{SgResponse, SgBody, route_layers::http_route::match_request::SgHttpRouteMatch};
 
 
 // pub fn http_common_modify_path(
@@ -119,21 +119,28 @@ impl fmt::Display for SgAttachedLevel {
 pub struct SgContext {
     /// A unique identifier for the request.
     request_id: String,
+    headers: http::HeaderMap,
+    matched: Option<Arc<SgHttpRouteMatch>>,
     /// see [SgPluginFilterKind]
     // request_kind: SgPluginFilterKind,
 
     // chosen_route_rule: Option<ChosenHttpRouteRuleInst>,
     // chosen_backend: Option<AvailableBackendInst>,
 
+    backend: Option<String>,
+
     ext: HashMap<String, String>,
 
     /// Describe user information
     ident_info: Option<SGIdentInfo>,
     // action: SgRouteFilterRequestAction,
-    gateway_name: String,
+    pub gateway_name: String,
 }
 
 impl SgContext {
+    pub fn internal_error() -> Self {
+        Self::default()
+    }
     pub fn response(self, response: Response<SgBody>) -> SgResponse {
         SgResponse {
             context: self,

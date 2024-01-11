@@ -1,5 +1,5 @@
 mod builder;
-mod match_request;
+pub mod match_request;
 mod picker;
 mod predicate;
 use std::{sync::Arc, time::Duration};

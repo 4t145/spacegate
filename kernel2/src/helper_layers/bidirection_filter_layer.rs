@@ -1,11 +1,12 @@
 use pin_project_lite::pin_project;
+use tower::BoxError;
 use std::{
     future::Future,
     pin::Pin,
     task::{Context, Poll},
 };
 use tardis::{
-    basic::{error::TardisError, result::TardisResult},
+    basic::{result::TardisResult},
     futures_util::ready,
 };
 use tower_layer::Layer;
@@ -57,11 +58,11 @@ where
 impl<F, S> Service<SgRequest> for BdfService<F, S>
 where
     Self: Clone,
-    S: Service<SgRequest, Error = TardisError, Response = SgResponse>,
+    S: Service<SgRequest, Error = BoxError, Response = SgResponse>,
     F: Bdf,
 {
     type Response = SgResponse;
-    type Error = TardisError;
+    type Error = BoxError;
     type Future = FilterFuture<F, S>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -81,7 +82,7 @@ where
 pin_project! {
     pub struct FilterFuture<F, S>
     where
-        S: Service<SgRequest, Error = TardisError, Response = SgResponse>,
+        S: Service<SgRequest, Error = BoxError, Response = SgResponse>,
         F: Bdf,
     {
         request: Option<SgRequest>,
@@ -113,10 +114,10 @@ pin_project! {
 
 impl<F, S> Future for FilterFuture<F, S>
 where
-    S: Service<SgRequest, Error = TardisError, Response = SgResponse>,
+    S: Service<SgRequest, Error = BoxError, Response = SgResponse>,
     F: Bdf,
 {
-    type Output = TardisResult<SgResponse>;
+    type Output = Result<SgResponse, BoxError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut this = self.project();

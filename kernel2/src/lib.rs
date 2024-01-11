@@ -1,8 +1,9 @@
 // pub mod config;
+pub mod body;
 pub mod context;
 pub mod helper_layers;
 pub mod plugin_layers;
-pub mod service;
+pub mod route_layers;
 pub mod utils;
 
 use context::SgContext;
@@ -12,6 +13,7 @@ use hyper::{
     body::{Body, Bytes},
     Request, Response, StatusCode,
 };
+use tardis::basic::error::TardisError;
 use tower::{
     util::{BoxLayer, BoxService},
     BoxError,
@@ -33,6 +35,9 @@ impl Body for SgBody {
 }
 
 impl SgBody {
+    pub fn new(body: impl Body<Data = Bytes, Error = hyper::Error> + Send + Sync + 'static) -> Self {
+        Self(BoxBody::new(body))
+    }
     pub fn empty() -> Self {
         Self(BoxBody::new(Empty::new().map_err(never)))
     }
@@ -57,9 +62,15 @@ impl SgRequest {
     pub fn new(context: SgContext, request: Request<SgBody>) -> Self {
         Self { context, request }
     }
+    pub fn into_context(self) -> (SgContext, Request<SgBody>) {
+        (self.context, self.request)
+    }
 }
 
 impl SgResponse {
+    pub fn internal_error<E: std::error::Error>(context: SgContext) -> impl FnOnce(E) -> Self {
+        move |e| Self::with_code_message(context, StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+    }
     pub fn new(context: SgContext, response: Response<SgBody>) -> Self {
         Self { context, response }
     }
@@ -69,9 +80,27 @@ impl SgResponse {
             response: Response::builder().status(code).body(SgBody::full(message)).expect("response builder error"),
         }
     }
+    pub fn map_body<F, B>(self, f: F) -> Self
+    where
+        F: FnOnce(SgBody) -> B,
+        B: Body<Data = Bytes, Error = hyper::Error> + Send + Sync + 'static,
+    {
+        let (parts, body) = self.response.into_parts();
+        let body = SgBody::new(f(body));
+        Self {
+            context: self.context,
+            response: Response::from_parts(parts, body),
+        }
+    }
 }
 
 pub type ReqOrResp = Result<SgRequest, SgResponse>;
 
 type SgBoxService = BoxService<SgRequest, SgResponse, BoxError>;
 type SgBoxLayer = BoxLayer<SgBoxService, SgRequest, SgResponse, BoxError>;
+
+impl From<TardisError> for SgResponse {
+    fn from(e: TardisError) -> Self {
+        Self::with_code_message(SgContext::internal_error(), StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+    }
+}

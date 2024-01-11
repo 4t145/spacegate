@@ -3,7 +3,7 @@ use std::{
     str::FromStr,
 };
 
-use hyper::Uri;
+use hyper::{StatusCode, Uri};
 use serde::{Deserialize, Serialize};
 use tardis::{
     basic::{error::TardisError, result::TardisResult},
@@ -51,23 +51,28 @@ pub struct RedirectLayer {
 
 impl RedirectLayer {
     fn on_req(&self, req: SgRequest) -> Result<SgRequest, SgResponse> {
-        // let mut url = Url::parse(&req.request.uri().to_string())?;
-        // if let Some(hostname) = &self.hostname {
-        //     url.set_host(Some(hostname)).map_err(|_| TardisError::format_error(&format!("[SG.Filter.Redirect] Host {hostname} parsing error"), ""))?;
-        // }
-        // if let Some(scheme) = &self.scheme {
-        //     url.set_scheme(scheme).map_err(|_| TardisError::format_error(&format!("[SG.Filter.Redirect] Scheme {scheme} parsing error"), ""))?;
-        // }
-        // if let Some(port) = self.port {
-        //     url.set_port(Some(port)).map_err(|_| TardisError::format_error(&format!("[SG.Filter.Redirect] Port {port} parsing error"), ""))?;
-        // }
-        todo!();
+        let (context, request) = req.into_context();
+        let mut url = Url::parse(&request.uri().to_string())
+            .map_err(|e| SgResponse::with_code_message(context.clone(), StatusCode::BAD_REQUEST, format!("[SG.Filter.Redirect] Url parsing error: {}", e)))?;
+        if let Some(hostname) = &self.hostname {
+            url.set_host(Some(hostname))
+                .map_err(|_| SgResponse::with_code_message(context.clone(), StatusCode::BAD_REQUEST, format!("[SG.Filter.Redirect] Host {hostname} parsing error")))?;
+        }
+        if let Some(scheme) = &self.scheme {
+            url.set_scheme(scheme)
+                .map_err(|_| SgResponse::with_code_message(context.clone(), StatusCode::BAD_REQUEST, format!("[SG.Filter.Redirect] Scheme {scheme} parsing error")))?;
+        }
+        if let Some(port) = self.port {
+            url.set_port(Some(port))
+                .map_err(|_| SgResponse::with_code_message(context.clone(), StatusCode::BAD_REQUEST, format!("[SG.Filter.Redirect] Port {port} parsing error")))?;
+        }
+        // todo!();
         // let matched_match_inst = req.context.get_rule_matched();
         // if let Some(new_url) = http_common_modify_path(req.request.get_uri(), &self.path, matched_match_inst.as_ref())? {
         //     req.request.set_uri(new_url);
         // }
         // ctx.set_action(SgRouteFilterRequestAction::Redirect);
-        return Ok(req);
+        Ok(SgRequest::new(context, request))
     }
 }
 

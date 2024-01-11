@@ -21,12 +21,13 @@ hyper = { version = "1" }
 http-body-util = { version = "0" }
 tower-service = { version = "0.3.2" }
 tower-layer = { version = "0.3.2" }
-tower = { version = "0.4.13", features = ["full"]}
+tower = { version = "0.4.13", features = ["full"] }
+tower-http = { version = "0.5", features = ["full"] }
 pin-project-lite = { version = "0.2.13" }
-
+async-compression = { version = "0.4.5", features = ["tokio", "gzip", "deflate", "brotli"] }
 # serde
-serde = { version = "1", features = ["derive"]}
+serde = { version = "1", features = ["derive"] }
 serde_regex = "1.1.0"
 http-serde = "2.0.0"
-
+tokio-util = { version = "0.7.8", features = ["io"] }
 tardis = { workspace = true }
