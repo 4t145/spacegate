@@ -11,7 +11,7 @@ pub mod content_encoding;
 pub mod future;
 use std::{cmp::Ordering, str::FromStr};
 
-use crate::{plugin_layers::comde::content_encoding::ContentEncodingType, SgBoxService, SgRequest, SgResponse};
+use crate::{plugin_layers::comde::content_encoding::ContentEncodingType, SgBoxService,};
 use hyper::{Request, Response};
 use hyper::header::{HeaderValue, ACCEPT_ENCODING, CONTENT_ENCODING};
 use serde::{Deserialize, Serialize};
@@ -56,10 +56,10 @@ pub fn echo_body<B: hyper::body::Body>(mut req: Request<B>) -> Response<B> {
 }
 
 impl ComdeService {
-    pub fn get_accept_encoding(&self, req: &SgRequest) -> Option<CompressionType> {
+    pub fn get_accept_encoding(&self, req: &Request<SgBody>) -> Option<CompressionType> {
         req.request.headers().get(ACCEPT_ENCODING).and_then(|h| CompressionType::try_from(h).ok())
     }
-    pub fn on_response(&self, mut resp: SgResponse, accept: AcceptEncoding) -> SgResponse {
+    pub fn on_response(&self, mut resp: Response<SgBody>, accept: AcceptEncoding) -> Response<SgBody> {
         let service = TowerDecompression::new(service_fn(echo_body));
         let content_encoding = if let Some(s) = resp.response.headers().get(CONTENT_ENCODING) {
             let Ok(content_encoding) = ContentEncodingType::try_from(s) else {
@@ -111,16 +111,16 @@ impl ComdeService {
 
     }
 }
-impl Service<SgRequest> for DecompressionService {
-    type Response = SgResponse;
-    type Error = BoxError;
-    type Future = <SgBoxService as Service<SgRequest>>::Future;
+impl Service<Request<SgBody>> for DecompressionService {
+    type Response = Response<SgBody>;
+    type Error = Infallible;
+    type Future = <SgBoxService as Service<Request<SgBody>>>::Future;
 
     fn poll_ready(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
         todo!()
     }
 
-    fn call(&mut self, req: SgRequest) -> Self::Future {
+    fn call(&mut self, req: Request<SgBody>) -> Self::Future {
         let accept_encoding = req.request.headers().get(ACCEPT_ENCODING).map(|h|CompressionType::try_from(h).ok()).flatten();
         let fut = self.inner.call(req);
         todo!()

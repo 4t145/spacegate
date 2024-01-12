@@ -6,101 +6,145 @@ pub mod plugin_layers;
 pub mod route_layers;
 pub mod utils;
 
+use std::{convert::Infallible, fmt, sync::Arc};
+
 use context::SgContext;
+use helper_layers::response_error::ErrorFormatter;
 use http_body_util::{combinators::BoxBody, BodyExt, Empty, Full};
 
 use hyper::{
     body::{Body, Bytes},
     Request, Response, StatusCode,
 };
-use tardis::basic::error::TardisError;
-use tower::{
-    util::{BoxLayer, BoxService},
-    BoxError,
-};
-use utils::never;
+use tower::util::BoxCloneService;
+use tower_layer::{layer_fn, Layer};
+use tower_service::Service;
+use utils::{fold_sg_layers::fold_sg_layers, never};
 
 #[derive(Debug)]
-#[repr(transparent)]
-pub struct SgBody(BoxBody<Bytes, hyper::Error>);
+pub struct SgBody {
+    body: BoxBody<Bytes, hyper::Error>,
+    context: SgContext,
+}
+
+impl Default for SgBody {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
 
 impl Body for SgBody {
     type Data = Bytes;
     type Error = hyper::Error;
 
     fn poll_frame(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Option<Result<hyper::body::Frame<Self::Data>, Self::Error>>> {
-        let mut pinned = std::pin::pin!(&mut self.0);
+        let mut pinned = std::pin::pin!(&mut self.body);
         pinned.as_mut().poll_frame(cx)
     }
 }
 
 impl SgBody {
     pub fn new(body: impl Body<Data = Bytes, Error = hyper::Error> + Send + Sync + 'static) -> Self {
-        Self(BoxBody::new(body))
+        Self {
+            body: BoxBody::new(body),
+            context: SgContext::default(),
+        }
     }
     pub fn empty() -> Self {
-        Self(BoxBody::new(Empty::new().map_err(never)))
+        Self {
+            body: BoxBody::new(Empty::new().map_err(never)),
+            context: SgContext::default(),
+        }
     }
     pub fn full(data: impl Into<Bytes>) -> Self {
-        Self(BoxBody::new(Full::new(data.into()).map_err(never)))
-    }
-}
-
-#[derive(Debug)]
-pub struct SgRequest {
-    pub context: SgContext,
-    pub request: Request<SgBody>,
-}
-
-#[derive(Debug)]
-pub struct SgResponse {
-    pub context: SgContext,
-    pub response: Response<SgBody>,
-}
-
-impl SgRequest {
-    pub fn new(context: SgContext, request: Request<SgBody>) -> Self {
-        Self { context, request }
-    }
-    pub fn into_context(self) -> (SgContext, Request<SgBody>) {
-        (self.context, self.request)
-    }
-}
-
-impl SgResponse {
-    pub fn internal_error<E: std::error::Error>(context: SgContext) -> impl FnOnce(E) -> Self {
-        move |e| Self::with_code_message(context, StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-    }
-    pub fn new(context: SgContext, response: Response<SgBody>) -> Self {
-        Self { context, response }
-    }
-    pub fn with_code_message(context: SgContext, code: StatusCode, message: impl Into<Bytes>) -> Self {
         Self {
-            context,
-            response: Response::builder().status(code).body(SgBody::full(message)).expect("response builder error"),
+            body: BoxBody::new(Full::new(data.into()).map_err(never)),
+            context: SgContext::default(),
         }
     }
-    pub fn map_body<F, B>(self, f: F) -> Self
+}
+
+pub trait SgResponseExt {
+    fn with_code_message(code: StatusCode, message: impl Into<Bytes>) -> Self;
+    fn internal_error<E: std::error::Error>(e: E) -> Self
     where
-        F: FnOnce(SgBody) -> B,
-        B: Body<Data = Bytes, Error = hyper::Error> + Send + Sync + 'static,
+        Self: Sized,
     {
-        let (parts, body) = self.response.into_parts();
-        let body = SgBody::new(f(body));
-        Self {
-            context: self.context,
-            response: Response::from_parts(parts, body),
-        }
+        Self::with_code_message(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+    }
+    fn from_error<E: std::error::Error, F: ErrorFormatter>(e: E, formatter: &F) -> Self
+    where
+        Self: Sized,
+    {
+        Self::with_code_message(StatusCode::INTERNAL_SERVER_ERROR, formatter.format(&e))
     }
 }
 
-pub type ReqOrResp = Result<SgRequest, SgResponse>;
+impl SgResponseExt for Response<SgBody> {
+    fn with_code_message(code: StatusCode, message: impl Into<Bytes>) -> Self {
+        let body = SgBody::full(message);
+        Response::builder().status(code).body(body).expect("response builder error")
+    }
+}
 
-type SgBoxService = BoxService<SgRequest, SgResponse, BoxError>;
-type SgBoxLayer = BoxLayer<SgBoxService, SgRequest, SgResponse, BoxError>;
+pub type ReqOrResp = Result<Request<SgBody>, Response<SgBody>>;
 
-impl From<TardisError> for SgResponse {
-    fn from(e: TardisError) -> Self {
-        Self::with_code_message(SgContext::internal_error(), StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+type SgBoxService = BoxCloneService<Request<SgBody>, Response<SgBody>, Infallible>;
+// type SgBoxLayer<S> = BoxLayer<S, Request<SgBody>, Response<SgBody>, Infallible>;
+
+pub struct SgBoxLayer {
+    boxed: Arc<dyn Layer<SgBoxService, Service = SgBoxService> + Send + Sync + 'static>,
+}
+
+impl FromIterator<SgBoxLayer> for SgBoxLayer {
+    fn from_iter<T: IntoIterator<Item = SgBoxLayer>>(iter: T) -> Self {
+        fold_sg_layers(iter.into_iter())
+    }
+}
+
+impl<'a> FromIterator<&'a SgBoxLayer> for SgBoxLayer {
+    fn from_iter<T: IntoIterator<Item = &'a SgBoxLayer>>(iter: T) -> Self {
+        fold_sg_layers(iter.into_iter().cloned())
+    }
+}
+
+impl SgBoxLayer {
+    /// Create a new [`BoxLayer`].
+    pub fn new<L>(inner_layer: L) -> Self
+    where
+        L: Layer<SgBoxService> + Send + Sync + 'static,
+        L::Service: Clone + Service<Request<SgBody>, Response = Response<SgBody>, Error = Infallible> + Send + 'static,
+        <L::Service as Service<Request<SgBody>>>::Future: Send + 'static,
+    {
+        let layer = layer_fn(move |inner: SgBoxService| {
+            let out = inner_layer.layer(inner);
+            SgBoxService::new(out)
+        });
+
+        Self { boxed: Arc::new(layer) }
+    }
+}
+
+impl<S> Layer<S> for SgBoxLayer
+where
+    S: Clone + Service<Request<SgBody>, Response = Response<SgBody>, Error = Infallible> + Send + 'static,
+    <S as tower_service::Service<hyper::Request<SgBody>>>::Future: std::marker::Send,
+{
+    type Service = SgBoxService;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        self.boxed.layer(SgBoxService::new(inner))
+    }
+}
+
+impl Clone for SgBoxLayer {
+    fn clone(&self) -> Self {
+        Self { boxed: Arc::clone(&self.boxed) }
+    }
+}
+
+impl fmt::Debug for SgBoxLayer {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.debug_struct("BoxLayer").finish()
     }
 }

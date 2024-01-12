@@ -38,7 +38,7 @@ impl From<ContentEncodingType> for AcceptEncodingType {
 
 
 impl TryFrom<&HeaderValue> for ContentEncodingType {
-    type Error = BoxError;
+    type Error = Infallible;
 
     fn try_from(header_value: &HeaderValue) -> Result<Self, Self::Error> {
         match header_value.as_bytes() {

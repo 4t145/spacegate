@@ -3,87 +3,7 @@ use hyper::{http, Response};
 use serde::{Serialize, Deserialize};
 use tardis::{basic::{error::TardisError, result::TardisResult}, log, url::Url};
 
-use crate::{SgResponse, SgBody, route_layers::http_route::match_request::SgHttpRouteMatch};
-
-
-// pub fn http_common_modify_path(
-//     uri: &hyper::http::Uri,
-//     modify_path: &Option<SgHttpPathModifier>,
-//     matched_match_inst: Option<&SgHttpRouteMatchInst>,
-// ) -> TardisResult<Option<http::Uri>> {
-//     if let Some(modify_path) = &modify_path {
-//         let mut uri = Url::parse(&uri.to_string())?;
-//         match modify_path.kind {
-//             SgHttpPathModifierType::ReplaceFullPath => {
-//                 log::debug!(
-//                     "[SG.Plugin.Filter.Common] Modify path with modify kind [ReplaceFullPath], form {} to  {}",
-//                     uri.path(),
-//                     modify_path.value
-//                 );
-//                 uri.set_path(&modify_path.value);
-//             }
-//             SgHttpPathModifierType::ReplacePrefixMatch => {
-//                 if let Some(Some(matched_path)) = matched_match_inst.map(|m| m.path.as_ref()) {
-//                     match matched_path.kind {
-//                         SgHttpPathMatchType::Exact => {
-//                             // equivalent to ` SgHttpPathModifierType::ReplaceFullPath`
-//                             // https://cloud.yandex.com/en/docs/application-load-balancer/k8s-ref/http-route
-//                             log::debug!(
-//                                 "[SG.Plugin.Filter.Common] Modify path with modify kind [ReplacePrefixMatch] and match kind [Exact], form {} to {}",
-//                                 uri.path(),
-//                                 modify_path.value
-//                             );
-//                             uri.set_path(&modify_path.value);
-//                         }
-//                         _ => {
-//                             let origin_path = uri.path();
-//                             let match_path = if matched_path.kind == SgHttpPathMatchType::Prefix {
-//                                 &matched_path.value
-//                             } else {
-//                                 // Support only one capture group
-//                                 matched_path.regular.as_ref().expect("").captures(origin_path).map(|cap| cap.get(1).map_or("", |m| m.as_str())).unwrap_or("")
-//                             };
-//                             let match_path_reduce = origin_path.strip_prefix(match_path).ok_or_else(|| {
-//                                 TardisError::format_error(
-//                                     "[SG.Plugin.Filter.Common] Modify path with modify kind [ReplacePrefixMatch] and match kind [Exact] failed",
-//                                     "",
-//                                 )
-//                             })?;
-//                             let new_path = if match_path_reduce.is_empty() {
-//                                 modify_path.value.to_string()
-//                             } else if match_path_reduce.starts_with('/') && modify_path.value.ends_with('/') {
-//                                 format!("{}{}", modify_path.value, &match_path_reduce.to_string()[1..])
-//                             } else if match_path_reduce.starts_with('/') || modify_path.value.ends_with('/') {
-//                                 format!("{}{}", modify_path.value, &match_path_reduce.to_string())
-//                             } else {
-//                                 format!("{}/{}", modify_path.value, &match_path_reduce.to_string())
-//                             };
-//                             log::debug!(
-//                                 "[SG.Plugin.Filter.Common] Modify path with modify kind [ReplacePrefixMatch] and match kind [Prefix/Regular], form {} to {}",
-//                                 origin_path,
-//                                 new_path,
-//                             );
-//                             uri.set_path(&new_path);
-//                         }
-//                     }
-//                 } else {
-//                     // TODO
-//                     // equivalent to ` SgHttpPathModifierType::ReplaceFullPath`
-//                     log::debug!(
-//                         "[SG.Plugin.Filter.Common] Modify path with modify kind [None], form {} to {}",
-//                         uri.path(),
-//                         modify_path.value,
-//                     );
-//                     uri.set_path(&modify_path.value);
-//                 }
-//             }
-//         }
-//         return Ok(Some(
-//             uri.as_str().parse().map_err(|e| TardisError::internal_error(&format!("[SG.Plugin.Filter.Common] uri parse error: {}", e), ""))?,
-//         ));
-//     }
-//     Ok(None)
-// }
+use crate::{SgBody, route_layers::http_route::match_request::SgHttpRouteMatch};
 
 // TODO
 /// The SgPluginFilterKind enum is used to represent the types of plugins
@@ -140,12 +60,6 @@ pub struct SgContext {
 impl SgContext {
     pub fn internal_error() -> Self {
         Self::default()
-    }
-    pub fn response(self, response: Response<SgBody>) -> SgResponse {
-        SgResponse {
-            context: self,
-            response,
-        }
     }
 }
 

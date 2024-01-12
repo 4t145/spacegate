@@ -1,24 +1,17 @@
-use std::{
-    borrow::Cow,
-    future::{self, Future},
-    pin::Pin,
-    sync::Arc,
-    task::ready,
-    time::Duration,
-};
+use std::{future::Future, pin::Pin, sync::Arc, task::ready, time::Duration};
 
-use crate::{SgRequest, SgResponse};
+use hyper::{Request, Response};
 use pin_project_lite::pin_project;
 use serde::{Deserialize, Serialize};
 use tardis::{
-    basic::{error::TardisError, result::TardisResult},
-    futures_util::FutureExt,
-    log,
+    basic::error::TardisError,
     rand::{self, Rng},
     tokio::{self, time::Sleep},
 };
 use tower::retry::{Policy, Retry as TowerRetry, RetryLayer};
 use tower_layer::Layer;
+
+use crate::SgBody;
 
 pub struct Retry {
     inner_layer: RetryLayer<RetryPolicy>,
@@ -104,10 +97,10 @@ impl<T> Future for Delay<T> {
     }
 }
 
-impl Policy<SgRequest, SgResponse, TardisError> for RetryPolicy {
+impl Policy<Request<SgBody>, Response<SgBody>, TardisError> for RetryPolicy {
     type Future = Delay<Self>;
 
-    fn retry(&self, _req: &SgRequest, result: Result<&SgResponse, &TardisError>) -> Option<Self::Future> {
+    fn retry(&self, _req: &Request<SgBody>, result: Result<&Response<SgBody>, &TardisError>) -> Option<Self::Future> {
         if self.times < self.config.retries.into() && result.is_err() {
             let delay = match self.config.backoff {
                 BackOff::Fixed => self.config.base_interval,
@@ -129,7 +122,7 @@ impl Policy<SgRequest, SgResponse, TardisError> for RetryPolicy {
         }
     }
 
-    fn clone_request(&self, req: &SgRequest) -> Option<SgRequest> {
+    fn clone_request(&self, req: &Request<SgBody>) -> Option<Request<SgBody>> {
         // dump body here
 
         todo!()

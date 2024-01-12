@@ -1,9 +1,10 @@
+use hyper::{Request, Response};
 use pin_project_lite::pin_project;
 use tower::BoxError;
 use std::{
     future::Future,
     pin::Pin,
-    task::{Context, Poll},
+    task::{Context, Poll}, convert::Infallible,
 };
 use tardis::{
     basic::{result::TardisResult},
@@ -11,16 +12,16 @@ use tardis::{
 };
 use tower_layer::Layer;
 use tower_service::Service;
-
-use crate::{SgRequest, SgResponse, SgBoxService};
+pub use tower::util::{MapRequest, MapResponse, MapFuture};
+use crate::{SgBoxService, SgBody};
 
 /// Bi-Direction Filter
 pub trait Bdf: Send + Sync {
-    type FutureReq: Future<Output = Result<SgRequest, SgResponse>> + Send;
-    type FutureResp: Future<Output = SgResponse> + Send;
+    type FutureReq: Future<Output = Result<Request<SgBody>, Response<SgBody>>> + Send;
+    type FutureResp: Future<Output = Response<SgBody>> + Send;
 
-    fn on_req(&self, req: SgRequest) -> Self::FutureReq;
-    fn on_resp(&self, resp: SgResponse) -> Self::FutureResp;
+    fn on_req(&self, req: Request<SgBody>) -> Self::FutureReq;
+    fn on_resp(&self, resp: Response<SgBody>) -> Self::FutureResp;
 }
 
 /// Bi-Direction Filter Layer
@@ -55,21 +56,21 @@ where
     }
 }
 
-impl<F, S> Service<SgRequest> for BdfService<F, S>
+impl<F, S> Service<Request<SgBody>> for BdfService<F, S>
 where
     Self: Clone,
-    S: Service<SgRequest, Error = BoxError, Response = SgResponse>,
+    S: Service<Request<SgBody>, Error = Infallible, Response = Response<SgBody>>,
     F: Bdf,
 {
-    type Response = SgResponse;
-    type Error = BoxError;
+    type Response = Response<SgBody>;
+    type Error = Infallible;
     type Future = FilterFuture<F, S>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.service.poll_ready(cx)
     }
 
-    fn call(&mut self, request: SgRequest) -> Self::Future {
+    fn call(&mut self, request: Request<SgBody>) -> Self::Future {
         let cloned = self.clone();
         FilterFuture {
             request: Some(request),
@@ -82,10 +83,10 @@ where
 pin_project! {
     pub struct FilterFuture<F, S>
     where
-        S: Service<SgRequest, Error = BoxError, Response = SgResponse>,
+        S: Service<Request<SgBody>, Error = Infallible, Response = Response<SgBody>>,
         F: Bdf,
     {
-        request: Option<SgRequest>,
+        request: Option<Request<SgBody>>,
         #[pin]
         state: FilterFutureState<F::FutureReq, F::FutureResp, S::Future>,
         #[pin]
@@ -114,10 +115,10 @@ pin_project! {
 
 impl<F, S> Future for FilterFuture<F, S>
 where
-    S: Service<SgRequest, Error = BoxError, Response = SgResponse>,
+    S: Service<Request<SgBody>, Error = Infallible, Response = Response<SgBody>>,
     F: Bdf,
 {
-    type Output = Result<SgResponse, BoxError>;
+    type Output = Result<Response<SgBody>, Infallible>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut this = self.project();

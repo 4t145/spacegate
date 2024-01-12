@@ -84,7 +84,7 @@ impl TryFrom<&[u8]> for CompressionType {
 }
 
 impl TryFrom<&HeaderValue> for CompressionType {
-    type Error = BoxError;
+    type Error = Infallible;
 
     fn try_from(header_value: &HeaderValue) -> Result<Self, Self::Error> {
         let s = header_value.to_str()?;

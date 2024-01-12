@@ -1,14 +1,10 @@
-use std::{borrow::Cow, future::Future};
-
-use tower::BoxError;
-
-use crate::{SgBoxLayer, SgBoxService, SgRequest, SgResponse};
+use crate::SgBoxLayer;
 
 pub mod header_modifier;
-pub mod redirect;
-pub mod retry;
 pub mod inject;
 pub mod rate_limit;
+pub mod redirect;
+pub mod retry;
 // pub mod comde;
 
 pub trait MakeSgLayer {

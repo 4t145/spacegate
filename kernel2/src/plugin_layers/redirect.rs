@@ -3,7 +3,9 @@ use std::{
     str::FromStr,
 };
 
-use hyper::{StatusCode, Uri};
+use crate::helper_layers::filter::{Filter, FilterRequestLayer};
+use crate::{helper_layers::filter::FilterRequest, SgResponseExt};
+use hyper::{Request, Response, StatusCode, Uri};
 use serde::{Deserialize, Serialize};
 use tardis::{
     basic::{error::TardisError, result::TardisResult},
@@ -11,7 +13,7 @@ use tardis::{
 };
 use tower_layer::Layer;
 
-use crate::{helper_layers::imresp_layer::ImmediatelyResponseLayer, SgBoxService, SgRequest, SgResponse};
+use crate::{ SgBody, SgBoxService};
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct SgHttpPathModifier {
@@ -36,7 +38,7 @@ pub enum SgHttpPathModifierType {
 ///
 /// https://gateway-api.sigs.k8s.io/geps/gep-726/
 #[derive(Debug, Clone)]
-pub struct RedirectLayer {
+pub struct RedirectFilter {
     /// Scheme is the scheme to be used in the value of the Location header in the response. When empty, the scheme of the request is used.
     pub scheme: Option<String>,
     /// Hostname is the hostname to be used in the value of the Location header in the response. When empty, the hostname in the Host header of the request is used.
@@ -49,22 +51,19 @@ pub struct RedirectLayer {
     pub status_code: Option<u16>,
 }
 
-impl RedirectLayer {
-    fn on_req(&self, req: SgRequest) -> Result<SgRequest, SgResponse> {
-        let (context, request) = req.into_context();
-        let mut url = Url::parse(&request.uri().to_string())
-            .map_err(|e| SgResponse::with_code_message(context.clone(), StatusCode::BAD_REQUEST, format!("[SG.Filter.Redirect] Url parsing error: {}", e)))?;
+impl RedirectFilter {
+    fn on_req(&self, req: Request<SgBody>) -> Result<Request<SgBody>, Response<SgBody>> {
+        let mut url = Url::parse(&req.uri().to_string())
+            .map_err(|e| Response::<SgBody>::with_code_message(StatusCode::BAD_REQUEST, format!("[SG.Filter.Redirect] Url parsing error: {}", e)))?;
         if let Some(hostname) = &self.hostname {
             url.set_host(Some(hostname))
-                .map_err(|_| SgResponse::with_code_message(context.clone(), StatusCode::BAD_REQUEST, format!("[SG.Filter.Redirect] Host {hostname} parsing error")))?;
+                .map_err(|_| Response::<SgBody>::with_code_message(StatusCode::BAD_REQUEST, format!("[SG.Filter.Redirect] Host {hostname} parsing error")))?;
         }
         if let Some(scheme) = &self.scheme {
-            url.set_scheme(scheme)
-                .map_err(|_| SgResponse::with_code_message(context.clone(), StatusCode::BAD_REQUEST, format!("[SG.Filter.Redirect] Scheme {scheme} parsing error")))?;
+            url.set_scheme(scheme).map_err(|_| Response::<SgBody>::with_code_message(StatusCode::BAD_REQUEST, format!("[SG.Filter.Redirect] Scheme {scheme} parsing error")))?;
         }
         if let Some(port) = self.port {
-            url.set_port(Some(port))
-                .map_err(|_| SgResponse::with_code_message(context.clone(), StatusCode::BAD_REQUEST, format!("[SG.Filter.Redirect] Port {port} parsing error")))?;
+            url.set_port(Some(port)).map_err(|_| Response::<SgBody>::with_code_message(StatusCode::BAD_REQUEST, format!("[SG.Filter.Redirect] Port {port} parsing error")))?;
         }
         // todo!();
         // let matched_match_inst = req.context.get_rule_matched();
@@ -72,34 +71,15 @@ impl RedirectLayer {
         //     req.request.set_uri(new_url);
         // }
         // ctx.set_action(SgRouteFilterRequestAction::Redirect);
-        Ok(SgRequest::new(context, request))
+        Ok(req)
     }
 }
 
-impl Layer<SgBoxService> for RedirectLayer {
-    type Service = SgBoxService;
-
-    fn layer(&self, service: SgBoxService) -> Self::Service {
-        use tower::util::MapRequestLayer;
-        let this = self.clone();
-        SgBoxService::new(MapRequestLayer::new(move |req: SgRequest| this.on_req(req)).layer(ImmediatelyResponseLayer.layer(service)))
+impl Filter for RedirectFilter {
+    fn filter(&self, req: Request<SgBody>) -> Result<Request<SgBody>, Response<SgBody>> {
+        self.on_req(req)
     }
 }
 
-// impl<I, O> SgFilter<I, O> for RedirectFilter
-// where
-//     I: Send + 'static,
-//     O: Send + 'static,
-// {
-//     type FutureReq = Ready<Result<SgRequest<I>, SgResponse<O>>>;
-
-//     type FutureResp = Ready<TardisResult<SgResponse<O>>>;
-
-//     fn on_req(&self, req: crate::SgRequest<I>) -> Self::FutureReq {
-//         ready(self.on_req_sync(req))
-//     }
-
-//     fn on_resp(&self, resp: crate::SgResponse<O>) -> Self::FutureResp {
-//         ready(Ok(resp))
-//     }
-// }
+pub type RedirectFilterLayer = FilterRequestLayer<RedirectFilter>;
+pub type Redirect<S> = FilterRequest<RedirectFilter, S>;

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tardis::regex::Regex;
 
-use crate::{utils::query_kv::QueryKvIter, SgRequest};
+use crate::{utils::query_kv::QueryKvIter, Request, SgBody};
 
 /// PathMatchType specifies the semantics of how HTTP paths should be compared.
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -18,11 +18,11 @@ pub enum SgHttpPathMatch {
 }
 
 impl MatchRequest for SgHttpPathMatch {
-    fn match_request(&self, req: &SgRequest) -> bool {
+    fn match_request(&self, req: &Request<SgBody>) -> bool {
         match self {
-            SgHttpPathMatch::Exact(path) => req.request.uri().path() == path,
-            SgHttpPathMatch::Prefix(path) => req.request.uri().path().starts_with(path),
-            SgHttpPathMatch::Regular(path) => path.is_match(req.request.uri().path()),
+            SgHttpPathMatch::Exact(path) => req.uri().path() == path,
+            SgHttpPathMatch::Prefix(path) => req.uri().path().starts_with(path),
+            SgHttpPathMatch::Regular(path) => path.is_match(req.uri().path()),
         }
     }
 }
@@ -43,10 +43,10 @@ pub struct SgHttpHeaderMatch {
 }
 
 impl MatchRequest for SgHttpHeaderMatch {
-    fn match_request(&self, req: &SgRequest) -> bool {
+    fn match_request(&self, req: &Request<SgBody>) -> bool {
         match &self.policy {
-            SgHttpHeaderMatchPolicy::Exact(header) => req.request.headers().get(&self.name).is_some_and(|v| v == header),
-            SgHttpHeaderMatchPolicy::Regular(header) => req.request.headers().iter().any(|(k, v)| k.as_str() == self.name && v.to_str().map_or(false, |v| header.is_match(v))),
+            SgHttpHeaderMatchPolicy::Exact(header) => req.headers().get(&self.name).is_some_and(|v| v == header),
+            SgHttpHeaderMatchPolicy::Regular(header) => req.headers().iter().any(|(k, v)| k.as_str() == self.name && v.to_str().map_or(false, |v| header.is_match(v))),
         }
     }
 }
@@ -67,8 +67,8 @@ pub struct SgHttpQueryMatch {
 }
 
 impl MatchRequest for SgHttpQueryMatch {
-    fn match_request(&self, req: &SgRequest) -> bool {
-        let query = req.request.uri().query();
+    fn match_request(&self, req: &Request<SgBody>) -> bool {
+        let query = req.uri().query();
         if let Some(query) = query {
             let mut iter = QueryKvIter::new(query);
             match &self.policy {
@@ -90,11 +90,11 @@ pub struct SgHttpRouteMatch {
 }
 
 pub trait MatchRequest {
-    fn match_request(&self, req: &SgRequest) -> bool;
+    fn match_request(&self, req: &Request<SgBody>) -> bool;
 }
 
 impl MatchRequest for SgHttpRouteMatch {
-    fn match_request(&self, req: &SgRequest) -> bool {
+    fn match_request(&self, req: &Request<SgBody>) -> bool {
         if let Some(path) = &self.path {
             if path.match_request(req) {
                 return true;
@@ -106,7 +106,7 @@ impl MatchRequest for SgHttpRouteMatch {
         if !self.query.is_empty() && self.query.iter().any(|query| query.match_request(req)) {
             return true;
         }
-        if !self.method.is_empty() && self.method.iter().any(|method| method.eq_ignore_ascii_case(req.request.method().as_str())) {
+        if !self.method.is_empty() && self.method.iter().any(|method| method.eq_ignore_ascii_case(req.method().as_str())) {
             return true;
         }
         false

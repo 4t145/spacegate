@@ -1,6 +1,6 @@
 use tower_layer::{Identity, Stack};
 
-use crate::SgBoxLayer;
+use crate::{SgBoxLayer, SgBoxService};
 
 /// fold a bunch of layers into a single layer, the front layers will be inner layers
 pub fn fold_sg_layers(layers: impl Iterator<Item = SgBoxLayer>) -> SgBoxLayer {

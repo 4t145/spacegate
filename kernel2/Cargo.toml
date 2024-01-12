@@ -31,3 +31,6 @@ serde_regex = "1.1.0"
 http-serde = "2.0.0"
 tokio-util = { version = "0.7.8", features = ["io"] }
 tardis = { workspace = true }
+
+# future
+futures-util = { version  = "*" }

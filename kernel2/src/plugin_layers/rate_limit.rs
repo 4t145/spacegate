@@ -6,12 +6,17 @@ use std::{
     time::SystemTime,
 };
 
-use hyper::StatusCode;
+use hyper::{Request, Response, StatusCode};
 use tardis::{cache::Script, tardis_static};
+use tower::util::BoxLayer;
+use tower_layer::Stack;
 
 use crate::{
-    helper_layers::bidirection_filter_layer::{Bdf, BdfLayer, BdfService},
-    SgRequest, SgResponse,
+    helper_layers::{
+        async_filter::{AsyncFilter, AsyncFilterRequest, AsyncFilterRequestLayer},
+        bidirection_filter::{Bdf, BdfLayer, BdfService},
+    },
+    SgBody, SgBoxLayer, SgResponseExt,
 };
 
 use super::MakeSgLayer;
@@ -85,7 +90,7 @@ tardis_static! {
 }
 
 impl RateLimitConfig {
-    async fn req_filter(&self, id: &str, req: SgRequest) -> Result<SgRequest, SgResponse> {
+    async fn req_filter(&self, id: &str, req: Request<SgBody>) -> Result<Request<SgBody>, Response<SgBody>> {
         if let Some(max_request_number) = &self.max_request_number {
             let result: &bool = &script()
                 // counter key
@@ -98,16 +103,12 @@ impl RateLimitConfig {
                 .arg(self.time_window_ms.unwrap_or(1000))
                 // current timestamp
                 .arg(SystemTime::now().duration_since(std::time::UNIX_EPOCH).expect("invalid system time: before unix epoch").as_millis() as u64)
-                .invoke_async(&mut req.context.cache().await?.cmd().await.map_err(SgResponse::internal_error(req.context.clone()))?)
+                .invoke_async(&mut req.body().context.cache().await.map_err(Response::<SgBody>::internal_error)?.cmd().await.map_err(Response::<SgBody>::internal_error)?)
                 .await
-                .map_err(|e| SgResponse::with_code_message(req.context.clone(), StatusCode::INTERNAL_SERVER_ERROR, format!("[SG.Filter.Limit] redis error: {e}")))?;
+                .map_err(|e| Response::<SgBody>::with_code_message(StatusCode::INTERNAL_SERVER_ERROR, format!("[SG.Filter.Limit] redis error: {e}")))?;
 
             if !result {
-                return Err(SgResponse::with_code_message(
-                    req.context.clone(),
-                    StatusCode::TOO_MANY_REQUESTS,
-                    "[SG.Filter.Limit] too many requests",
-                ));
+                return Err(Response::<SgBody>::with_code_message(StatusCode::TOO_MANY_REQUESTS, "[SG.Filter.Limit] too many requests"));
             }
         }
         Ok(req)
@@ -120,34 +121,14 @@ pub struct RateLimitFilter {
     pub service_id: Arc<str>,
 }
 
-impl Bdf for RateLimitFilter {
-    type FutureReq = Pin<Box<dyn Future<Output = Result<SgRequest, SgResponse>> + Send + 'static>>;
-
-    type FutureResp = Ready<SgResponse>;
-
-    fn on_req(&self, req: SgRequest) -> Self::FutureReq {
+impl AsyncFilter for RateLimitFilter {
+    type Future = Pin<Box<dyn Future<Output = Result<Request<SgBody>, Response<SgBody>>> + Send + 'static>>;
+    fn filter(&self, req: Request<SgBody>) -> Self::Future {
         let config = self.config.clone();
         let service_id = self.service_id.clone();
         Box::pin(async move { config.req_filter(&service_id, req).await })
     }
-
-    fn on_resp(&self, resp: SgResponse) -> Self::FutureResp {
-        ready(resp)
-    }
 }
 
-pub type RateLimitLayer = BdfLayer<RateLimitFilter>;
-pub type RateLimitService<S> = BdfService<RateLimitFilter, S>;
-
-impl MakeSgLayer for (RateLimitConfig, String) {
-    type Error = Infallible;
-
-    fn make_layer(&self) -> Result<crate::SgBoxLayer, Self::Error> {
-        let service_id = Arc::from(self.1.as_str());
-        let config = Arc::new(self.0.clone());
-        Ok(crate::SgBoxLayer::new(BdfLayer::new(RateLimitFilter {
-            config,
-            service_id,
-        })))
-    }
-}
+pub type RateLimitLayer = AsyncFilterRequestLayer<RateLimitFilter>;
+pub type RateLimit<S> = AsyncFilterRequest<RateLimitFilter, S>;
