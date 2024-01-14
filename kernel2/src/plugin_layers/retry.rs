@@ -126,7 +126,7 @@ impl Policy<Request<SgBody>, Response<SgBody>, TardisError> for RetryPolicy {
     }
 
     fn clone_request(&self, req: &Request<SgBody>) -> Option<Request<SgBody>> {
-        if req.body().dump.is_some() {
+        if !req.body().is_dumpped() {
             Some(req.clone())
         } else {
             None
