@@ -11,17 +11,20 @@ use tardis::{
 use tower::retry::{Policy, Retry as TowerRetry, RetryLayer};
 use tower_layer::Layer;
 
-use crate::SgBody;
+use crate::{
+    helper_layers::async_filter::{dump::Dump, AsyncFilterRequest, AsyncFilterRequestLayer},
+    SgBody,
+};
 
 pub struct Retry {
     inner_layer: RetryLayer<RetryPolicy>,
 }
 
 impl<S> Layer<S> for Retry {
-    type Service = TowerRetry<RetryPolicy, S>;
+    type Service = AsyncFilterRequest<Dump, TowerRetry<RetryPolicy, S>>;
 
     fn layer(&self, service: S) -> Self::Service {
-        self.inner_layer.layer(service)
+        AsyncFilterRequestLayer::new(Dump).layer(self.inner_layer.layer(service))
     }
 }
 
@@ -123,9 +126,10 @@ impl Policy<Request<SgBody>, Response<SgBody>, TardisError> for RetryPolicy {
     }
 
     fn clone_request(&self, req: &Request<SgBody>) -> Option<Request<SgBody>> {
-        // dump body here
-
-        todo!()
-        // Some(req.clone())
+        if req.body().dump.is_some() {
+            Some(req.clone())
+        } else {
+            None
+        }
     }
 }

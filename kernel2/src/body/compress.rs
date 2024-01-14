@@ -6,7 +6,7 @@ use http_body_util::{
     BodyExt, BodyStream, StreamBody,
 };
 use hyper::body::Body;
-use tardis::futures_util::{StreamExt, TryStreamExt};
+use futures_util::{StreamExt, TryStreamExt};
 use tokio_util::io::StreamReader;
 use tower_http::compression::CompressionBody;
 pub struct GzipBody<D, E> {

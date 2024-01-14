@@ -25,6 +25,7 @@ impl Default for ResponseErrorLayer<DefaultErrorFormatter> {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct DefaultErrorFormatter;
 
 impl ErrorFormatter for DefaultErrorFormatter {
@@ -51,7 +52,8 @@ where
     }
 }
 
-pub struct ResponseError<S, F> {
+#[derive(Debug, Clone)]
+pub struct ResponseError<S, F = DefaultErrorFormatter> {
     formatter: Arc<F>,
     inner: S,
 }
@@ -62,6 +64,16 @@ pin_project! {
         error: marker::PhantomData<E>,
         #[pin]
         inner: F,
+    }
+}
+
+impl<E, F, FMT> ResponseErrorFuture<E, F, FMT> {
+    pub fn new(formatter: impl Into<Arc<FMT>>, fut: F) -> Self {
+        ResponseErrorFuture {
+            formatter: formatter.into(),
+            error: marker::PhantomData,
+            inner: fut,
+        }
     }
 }
 

@@ -17,15 +17,17 @@ impl<S, R> Picker<SgHttpBackend<S>, R> for RouteByWeight {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct RouteByMatches;
+pub struct RouteByMatches {
+    pub fallback_index: usize,
+}
 
 impl Picker<SgRouteRule, Request<SgBody>> for RouteByMatches {
     fn pick(&mut self, r: &Request<SgBody>, services: &[SgRouteRule]) -> usize {
         for (i, service) in services.iter().enumerate() {
-            if service.r#match.match_request(r) {
+            if self.fallback_index != i && service.r#match.match_request(r) {
                 return i;
             }
         }
-        0
+        self.fallback_index
     }
 }

@@ -82,11 +82,22 @@ impl MatchRequest for SgHttpQueryMatch {
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[serde(transparent)]
+
+pub struct SgHttpMethodMatch(String);
+
+impl MatchRequest for SgHttpMethodMatch {
+    fn match_request(&self, req: &Request<SgBody>) -> bool {
+        req.method().as_str().eq_ignore_ascii_case(&self.0)
+    }
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct SgHttpRouteMatch {
     pub path: Option<SgHttpPathMatch>,
-    pub header: Vec<SgHttpHeaderMatch>,
-    pub query: Vec<SgHttpQueryMatch>,
-    pub method: Vec<String>,
+    pub header: Option<Vec<SgHttpHeaderMatch>>,
+    pub query: Option<Vec<SgHttpQueryMatch>>,
+    pub method: Option<Vec<SgHttpMethodMatch>>,
 }
 
 pub trait MatchRequest {
@@ -95,20 +106,24 @@ pub trait MatchRequest {
 
 impl MatchRequest for SgHttpRouteMatch {
     fn match_request(&self, req: &Request<SgBody>) -> bool {
-        if let Some(path) = &self.path {
-            if path.match_request(req) {
-                return true;
-            }
-        }
-        if !self.header.is_empty() && self.header.iter().any(|header| header.match_request(req)) {
-            return true;
-        }
-        if !self.query.is_empty() && self.query.iter().any(|query| query.match_request(req)) {
-            return true;
-        }
-        if !self.method.is_empty() && self.method.iter().any(|method| method.eq_ignore_ascii_case(req.method().as_str())) {
-            return true;
-        }
-        false
+        self.path.match_request(req) && self.header.match_request(req) && self.query.match_request(req) && self.method.match_request(req)
+    }
+}
+
+impl<T> MatchRequest for Option<T>
+where
+    T: MatchRequest,
+{
+    fn match_request(&self, req: &Request<SgBody>) -> bool {
+        self.as_ref().map(|r| MatchRequest::match_request(r, req)).unwrap_or(true)
+    }
+}
+
+impl<T> MatchRequest for Vec<T>
+where
+    T: MatchRequest,
+{
+    fn match_request(&self, req: &Request<SgBody>) -> bool {
+        self.iter().any(|query| query.match_request(req))
     }
 }
