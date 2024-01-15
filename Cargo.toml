@@ -1,5 +1,5 @@
 [workspace]
-members = ["kernel", "services/*", "kernel2"]
+members = ["kernel", "services/*", "spacegate-tower", "spacegate-plugin"]
 resolver = "2"
 
 [profile.release]

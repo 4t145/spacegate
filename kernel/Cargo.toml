@@ -23,6 +23,8 @@ ws = ["tardis/ws-client"]
 k8s = ["kube", "k8s-openapi", "k8s-gateway-api", "schemars", "cache"]
 
 [dependencies]
+spacegate-tower = { path = "../spacegate-tower" }
+
 serde.workspace = true
 serde_json.workspace = true
 lazy_static.workspace = true

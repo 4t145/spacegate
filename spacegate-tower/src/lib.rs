@@ -67,7 +67,7 @@ impl SgResponseExt for Response<SgBody> {
 
 pub type ReqOrResp = Result<Request<SgBody>, Response<SgBody>>;
 
-type SgBoxService = BoxCloneService<Request<SgBody>, Response<SgBody>, Infallible>;
+pub type SgBoxService = BoxCloneService<Request<SgBody>, Response<SgBody>, Infallible>;
 // type SgBoxLayer<S> = BoxLayer<S, Request<SgBody>, Response<SgBody>, Infallible>;
 
 pub struct SgBoxLayer {

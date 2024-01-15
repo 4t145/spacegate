@@ -14,6 +14,8 @@ use core::fmt;
 use serde_json::Value;
 use std::collections::HashMap;
 
+use spacegate_tower::plugin_layers::MakeSgLayer;
+
 use tardis::basic::error::TardisError;
 use tardis::basic::result::TardisResult;
 use tardis::url::Url;
@@ -101,7 +103,7 @@ pub fn get_filter_def(code: &str) -> TardisResult<&dyn SgPluginFilterDef> {
 }
 
 pub async fn init(filter_configs: Vec<SgRouteFilter>, init_dto: SgPluginFilterInitDto) -> TardisResult<Vec<(String, BoxSgPluginFilter)>> {
-    let mut plugin_filters: Vec<(String, BoxSgPluginFilter)> = Vec::new();
+    let mut plugin_filters: Vec<(String, Box<dyn MakeSgLayer>)> = Vec::new();
     let mut elements_to_remove = vec![];
     for filter_conf in filter_configs {
         let name = filter_conf.name.unwrap_or(TardisFuns::field.nanoid());
@@ -123,7 +125,7 @@ pub async fn init(filter_configs: Vec<SgRouteFilter>, init_dto: SgPluginFilterIn
 
 pub trait SgPluginFilterDef {
     fn get_code(&self) -> &str;
-    fn inst(&self, spec: Value) -> TardisResult<BoxSgPluginFilter>;
+    fn inst(&self, spec: Value) -> TardisResult<Box<dyn MakeSgLayer>>;
 }
 
 pub type BoxSgPluginFilter = Box<dyn SgPluginFilter>;

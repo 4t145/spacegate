@@ -1,0 +1,46 @@
+[package]
+name = "spacegate-plugin"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+readme = "../README.md"
+
+[lib]
+name = "spacegate_plugin"
+path = "src/lib.rs"
+
+[dependencies]
+spacegate-tower = { path = "../spacegate-tower" }
+
+hyper = { version = "1" }
+http-body-util = { version = "0" }
+tower-service = { version = "0.3.2" }
+tower-layer = { version = "0.3.2" }
+rustls = { version = "0.22" }
+tower = { version = "0.4.13", features = ["full"] }
+tower-http = { version = "0.5", features = ["full"] }
+pin-project-lite = { version = "0.2.13" }
+async-compression = { version = "0.4", features = [
+    "tokio",
+    "gzip",
+    "deflate",
+    "brotli",
+] }
+# serde
+serde = { version = "1", features = ["derive"] }
+serde_regex = "1.1.0"
+http-serde = "2.0.0"
+tokio-util = { version = "0.7.8", features = ["io"] }
+tardis = { workspace = true, features = ["cache"]}
+hyper-rustls = { version = "0.26" }
+hyper-util = { version = "*" }
+# future
+futures-util = { version = "*" }
+tokio-tungstenite = { version = "*" }

@@ -1,5 +1,5 @@
 [package]
-name = "spacegate-kernel2"
+name = "spacegate-tower"
 version.workspace = true
 authors.workspace = true
 description.workspace = true
@@ -13,7 +13,7 @@ edition.workspace = true
 readme = "../README.md"
 
 [lib]
-name = "spacegate_kernel2"
+name = "spacegate_tower"
 path = "src/lib.rs"
 
 [dependencies]
