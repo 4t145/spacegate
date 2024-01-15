@@ -11,6 +11,7 @@ use crate::{
     SgBody, SgBoxLayer, SgBoxService,
 };
 
+use http_serde::authority;
 use hyper::{Request, Response};
 use tower::steer::Steer;
 
@@ -158,6 +159,9 @@ impl Service<Request<SgBody>> for SgRouteRule {
 #[derive(Debug, Clone)]
 pub struct SgHttpBackendLayer {
     pub filters: Arc<[SgBoxLayer]>,
+    pub host: Option<Arc<str>>,
+    pub port: Option<u16>,
+    pub scheme: Option<Arc<str>>,
     pub weight: u16,
     pub timeout: Option<Duration>,
 }
@@ -176,7 +180,36 @@ where
     type Service = SgHttpBackend<SgBoxService>;
 
     fn layer(&self, inner: S) -> Self::Service {
-        let mut filtered = self.filters.iter().collect::<SgBoxLayer>().layer(SgBoxService::new(inner));
+        let map_request = match (self.host.clone(), self.port, self.scheme.clone()) {
+            (None, None, None) => None,
+            (host, port, schema) => Some(move |mut req: Request<SgBody>| {
+                let uri = req.uri_mut();
+                let new_scheme = schema.as_deref().unwrap_or_else(|| uri.scheme_str().unwrap_or_default());
+                let (raw_host, raw_port) = if let Some(auth) = uri.authority() { (auth.host(), auth.port_u16()) } else { ("", None) };
+                let new_host = host.as_deref().unwrap_or(raw_host);
+                let new_port = port.or(raw_port);
+                let mut builder = hyper::http::uri::Uri::builder().scheme(new_scheme);
+                if let Some(new_port) = new_port {
+                    builder = builder.authority(format!("{}:{}", new_host, new_port));
+                } else {
+                    builder = builder.authority(new_host);
+                };
+                if let Some(path_and_query) = uri.path_and_query() {
+                    builder = builder.path_and_query(path_and_query.clone());
+                }
+                if let Ok(uri) = builder.build() {
+                    *req.uri_mut() = uri;
+                }
+                req
+            }),
+        };
+        let service = if let Some(map_request) = map_request {
+            let map_request = tower::util::MapRequestLayer::new(map_request);
+            SgBoxService::new(map_request.layer(inner))
+        } else {
+            SgBoxService::new(inner)
+        };
+        let mut filtered = self.filters.iter().collect::<SgBoxLayer>().layer(service);
         if let Some(timeout) = self.timeout {
             filtered = SgBoxService::new(Timeout::new(filtered, timeout));
         }

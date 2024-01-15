@@ -9,7 +9,7 @@ use super::{match_request::SgHttpRouteMatch, SgHttpBackendLayer, SgHttpRouteLaye
 #[derive(Debug)]
 pub struct SgHttpRouteLayerBuilder {
     pub hostnames: Vec<String>,
-    pub rules: Vec<SgHttpRouteRuleLayerBuilder>,
+    pub rules: Vec<SgHttpRouteRuleLayer>,
     pub fallback: Result<SgHttpRouteRuleLayer, BoxError>,
 }
 
@@ -31,18 +31,18 @@ impl SgHttpRouteLayerBuilder {
         self.hostnames = hostnames.into_iter().collect();
         self
     }
-    pub fn rule(mut self, rule: SgHttpRouteRuleLayerBuilder) -> Self {
+    pub fn rule(mut self, rule: SgHttpRouteRuleLayer) -> Self {
         self.rules.push(rule);
         self
     }
-    pub fn fallback(mut self, fallback: SgHttpRouteRuleLayerBuilder) -> Self {
-        self.fallback = fallback.build();
+    pub fn fallback(mut self, fallback: SgHttpRouteRuleLayer) -> Self {
+        self.fallback = Ok(fallback);
         self
     }
     pub fn build(self) -> Result<SgHttpRouteLayer, BoxError> {
         let mut rules = vec![self.fallback?];
-        for b in self.rules.into_iter() {
-            rules.push(b.build()?)
+        for r in self.rules.into_iter() {
+            rules.push(r);
         }
         Ok(SgHttpRouteLayer {
             hostnames: self.hostnames.into(),
@@ -57,7 +57,7 @@ pub struct SgHttpRouteRuleLayerBuilder {
     r#match: Option<SgHttpRouteMatch>,
     filters: Result<Vec<SgBoxLayer>, BoxError>,
     timeouts: Option<Duration>,
-    backends: Vec<SgHttpBackendLayerBuilder>,
+    backends: Vec<SgHttpBackendLayer>,
 }
 impl Default for SgHttpRouteRuleLayerBuilder {
     fn default() -> Self {
@@ -100,7 +100,7 @@ impl SgHttpRouteRuleLayerBuilder {
         self.timeouts = Some(timeout);
         self
     }
-    pub fn backend(mut self, backend: SgHttpBackendLayerBuilder) -> Self {
+    pub fn backend(mut self, backend: SgHttpBackendLayer) -> Self {
         self.backends.push(backend);
         self
     }
@@ -109,13 +109,16 @@ impl SgHttpRouteRuleLayerBuilder {
             r#match: self.r#match.into(),
             filters: Arc::from(self.filters?),
             timeouts: self.timeouts,
-            backends: Arc::from_iter(self.backends.into_iter().map(|b| b.build()).collect::<Result<Vec<_>, _>>()?),
+            backends: Arc::from_iter(self.backends),
         })
     }
 }
 
 #[derive(Debug)]
 pub struct SgHttpBackendLayerBuilder {
+    host: Option<String>,
+    port: Option<u16>,
+    protocol: Option<String>,
     plugins: Result<Vec<SgBoxLayer>, BoxError>,
     timeout: Option<Duration>,
     weight: u16,
@@ -124,6 +127,9 @@ pub struct SgHttpBackendLayerBuilder {
 impl Default for SgHttpBackendLayerBuilder {
     fn default() -> Self {
         Self {
+            host: None,
+            port: None,
+            protocol: None,
             plugins: Ok(Vec::new()),
             timeout: None,
             weight: 1,
@@ -157,8 +163,23 @@ impl SgHttpBackendLayerBuilder {
         self.weight = weight;
         self
     }
+    pub fn host(mut self, host: impl Into<String>) -> Self {
+        self.host = Some(host.into());
+        self
+    }
+    pub fn port(mut self, port: u16) -> Self {
+        self.port = Some(port);
+        self
+    }
+    pub fn protocol(mut self, protocol: String) -> Self {
+        self.protocol = Some(protocol);
+        self
+    }
     pub fn build(self) -> Result<SgHttpBackendLayer, BoxError> {
         Ok(SgHttpBackendLayer {
+            host: self.host.map(Into::into),
+            port: self.port,
+            scheme: None,
             filters: Arc::from(self.plugins?),
             timeout: self.timeout,
             weight: self.weight,

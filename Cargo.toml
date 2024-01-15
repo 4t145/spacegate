@@ -61,3 +61,6 @@ async-compression = { version = "0.3.13", default-features = false, features = [
   "deflate",
   "brotli",
 ] }
+
+
+bytes = { version = "1" }

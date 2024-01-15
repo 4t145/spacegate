@@ -1,10 +1,10 @@
 // pub mod config;
 pub mod body;
-pub mod clients;
 pub mod context;
 pub mod helper_layers;
 pub mod plugin_layers;
 pub mod route_layers;
+pub mod service;
 pub mod utils;
 
 pub use body::SgBody;
@@ -29,18 +29,17 @@ use tower_layer::{layer_fn, Layer};
 use tower_service::Service;
 use utils::{fold_sg_layers::fold_sg_layers, never};
 
-
 pub trait SgRequestExt {
-    fn into_context(self) -> (SgContext, Request<BoxBody<Bytes, hyper::Error>>);
+    // fn into_context(self) -> (SgContext, Request<BoxBody<Bytes, hyper::Error>>);
 }
 
 impl SgRequestExt for Request<SgBody> {
-    fn into_context(self) -> (SgContext, Request<BoxBody<Bytes, hyper::Error>>) {
-        let (parts, body) = self.into_parts();
-        let (context, body) = body.into_context();
-        let real_body = Request::from_parts(parts, body);
-        (context, real_body)
-    }
+    // fn into_context(self) -> (SgContext, Request<BoxBody<Bytes, hyper::Error>>) {
+    //     let (parts, body) = self.into_parts();
+    //     let (context, body) = body.into_context();
+    //     let real_body = Request::from_parts(parts, body);
+    //     (context, real_body)
+    // }
 }
 
 pub trait SgResponseExt {
@@ -57,19 +56,12 @@ pub trait SgResponseExt {
     {
         Self::with_code_message(StatusCode::INTERNAL_SERVER_ERROR, formatter.format(&e))
     }
-    fn transpose(self) -> (SgContext, Response<BoxBody<Bytes, Error>>);
 }
 
 impl SgResponseExt for Response<SgBody> {
     fn with_code_message(code: StatusCode, message: impl Into<Bytes>) -> Self {
         let body = SgBody::full(message);
         Response::builder().status(code).body(body).expect("response builder error")
-    }
-    fn transpose(self) -> (SgContext, Response<BoxBody<Bytes, Error>>) {
-        let (parts, body) = self.into_parts();
-        let (context, body) = body.into_context();
-        let real_body = Response::from_parts(parts, body);
-        (context, real_body)
     }
 }
 
@@ -146,18 +138,18 @@ mod test {
     use http_body_util::BodyExt;
     use hyper::{Request, Response};
     use tardis::tokio;
-    use tower::ServiceExt;
+    use tower::{BoxError, ServiceExt};
     use tower_layer::Layer;
     use tower_service::Service;
 
     use crate::{
-        clients::http_client::SgHttpClient,
         helper_layers::filter::{response_anyway::ResponseAnyway, FilterRequestLayer},
         plugin_layers::SgLayer,
         route_layers::http_route::{
             match_request::{MatchRequest, SgHttpPathMatch, SgHttpRouteMatch},
             SgHttpBackendLayer, SgHttpRouteLayer, SgHttpRouteRuleLayer,
         },
+        service::http_client_service::SgHttpClient,
         SgBody, SgResponseExt,
     };
     #[derive(Clone)]
@@ -180,7 +172,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test() {
+    async fn test() -> Result<(), BoxError> {
         let request = Request::builder().uri("http://example.com/hello").body(SgBody::full("hello spacegate")).unwrap();
         let r#match = SgHttpRouteMatch {
             path: Some(SgHttpPathMatch::Exact("/hello".to_string())),
@@ -189,20 +181,24 @@ mod test {
         dbg!(r#match.match_request(&request));
         let http_router = SgHttpRouteLayer::builder()
             .hostnames(Some("example.com".to_string()))
-            .rule(SgHttpRouteRuleLayer::builder().r#match(r#match).timeout(Duration::from_secs(5)).backend(SgHttpBackendLayer::builder()))
+            .rule(SgHttpRouteRuleLayer::builder().r#match(r#match).timeout(Duration::from_secs(5)).backend(SgHttpBackendLayer::builder().build()?).build()?)
             .fallback(
-                SgHttpRouteRuleLayer::builder().backend(SgHttpBackendLayer::builder().plugin(SgLayer(FilterRequestLayer::new(ResponseAnyway {
-                    status: hyper::StatusCode::NOT_FOUND,
-                    message: "[Sg.HttpRouteRule] no rule matched".to_string().into(),
-                })))),
+                SgHttpRouteRuleLayer::builder()
+                    .backend(
+                        SgHttpBackendLayer::builder()
+                            .plugin(SgLayer(FilterRequestLayer::new(ResponseAnyway {
+                                status: hyper::StatusCode::NOT_FOUND,
+                                message: "[Sg.HttpRouteRule] no rule matched".to_string().into(),
+                            })))
+                            .build()?,
+                    )
+                    .build()?,
             )
-            .build()
-            .expect("");
-
+            .build()?;
         let mut test_service = http_router.layer(EchoService);
-        let (ctx, response) =
-            test_service.ready().await.unwrap().call(Request::builder().uri("http://example.com/hello").body(SgBody::full("hello spacegate")).unwrap()).await.unwrap().transpose();
-        let (parts, body) = response.into_parts();
-        dbg!(ctx, parts, body.collect().await.unwrap().to_bytes());
+        let (parts, body) =
+            test_service.ready().await.unwrap().call(Request::builder().uri("http://example.com/hello").body(SgBody::full("hello spacegate")).unwrap()).await.unwrap().into_parts();
+        dbg!(parts, body.collect().await.unwrap().to_bytes());
+        Ok(())
     }
 }

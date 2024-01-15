@@ -11,7 +11,6 @@ pub mod dump;
 pub struct SgBody {
     pub(crate) body: BoxBody<Bytes, hyper::Error>,
     dump: Option<Bytes>,
-    pub(crate) context: SgContext,
 }
 
 impl Default for SgBody {
@@ -34,21 +33,12 @@ impl SgBody {
     pub fn new(body: impl Body<Data = Bytes, Error = hyper::Error> + Send + Sync + 'static) -> Self {
         Self {
             body: BoxBody::new(body),
-            context: SgContext::default(),
-            dump: None,
-        }
-    }
-    pub fn with_context(body: impl Body<Data = Bytes, Error = hyper::Error> + Send + Sync + 'static, context: SgContext) -> Self {
-        Self {
-            body: BoxBody::new(body),
-            context,
             dump: None,
         }
     }
     pub fn empty() -> Self {
         Self {
             body: BoxBody::new(Empty::new().map_err(never)),
-            context: SgContext::default(),
             dump: None,
         }
     }
@@ -56,28 +46,21 @@ impl SgBody {
         let bytes = data.into();
         Self {
             body: BoxBody::new(Full::new(bytes.clone()).map_err(never)),
-            context: SgContext::default(),
             dump: Some(bytes),
         }
     }
-    pub fn into_context(self) -> (SgContext, BoxBody<Bytes, hyper::Error>) {
-        (self.context, self.body)
-    }
-    pub fn is_dumpped(&self) -> bool {
+    pub fn is_dumped(&self) -> bool {
         self.dump.is_none()
     }
     pub async fn dump(self) -> Result<Self, hyper::Error> {
-        let (context, body) = self.into_context();
-        let bytes = body.collect().await?.to_bytes();
+        let bytes = self.body.collect().await?.to_bytes();
         Ok(Self {
-            context,
             body: BoxBody::new(Full::new(bytes.clone()).map_err(never)),
             dump: Some(bytes),
         })
     }
     pub fn dump_clone(&self) -> Option<Self> {
         self.dump.as_ref().map(|bytes| Self {
-            context: self.context.clone(),
             body: BoxBody::new(Full::new(bytes.clone()).map_err(never)),
             dump: Some(bytes.clone()),
         })

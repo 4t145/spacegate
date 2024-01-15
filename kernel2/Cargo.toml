@@ -25,7 +25,7 @@ rustls = { version = "0.22" }
 tower = { version = "0.4.13", features = ["full"] }
 tower-http = { version = "0.5", features = ["full"] }
 pin-project-lite = { version = "0.2.13" }
-async-compression = { version = "0.4.5", features = [
+async-compression = { version = "0.4", features = [
     "tokio",
     "gzip",
     "deflate",
@@ -41,3 +41,4 @@ hyper-rustls = { version = "0.26" }
 hyper-util = { version = "*" }
 # future
 futures-util = { version = "*" }
+tokio-tungstenite = { version = "*" }

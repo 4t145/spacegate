@@ -1,12 +1,14 @@
-use std::{convert::Infallible, pin::Pin, sync::Arc};
+use std::{convert::Infallible, mem, pin::Pin, sync::Arc};
 
 use crate::{
+    context::SgContext,
     helper_layers::response_error::{DefaultErrorFormatter, ResponseError, ResponseErrorFuture},
-    SgBody, SgRequestExt, plugin_layers::MakeSgLayer,
+    plugin_layers::MakeSgLayer,
+    SgBody, SgRequestExt, SgResponseExt,
 };
 use futures_util::{Future, FutureExt, TryFutureExt};
 use http_body_util::combinators::BoxBody;
-use hyper::body::Bytes;
+use hyper::body::{Body, Bytes};
 use hyper::{body::Incoming, Request, Response};
 use hyper_rustls::HttpsConnector;
 use hyper_util::{
@@ -15,7 +17,9 @@ use hyper_util::{
 };
 use tower_service::Service;
 
-
+pub fn get_client() -> SgHttpClient {
+    todo!()
+}
 
 pub struct SgHttpClientConfig {
     pub tls_config: rustls::ClientConfig,
@@ -23,7 +27,7 @@ pub struct SgHttpClientConfig {
 
 #[derive(Debug, Clone)]
 pub struct SgHttpClient {
-    inner: Client<HttpsConnector<HttpConnector>, BoxBody<Bytes, hyper::Error>>,
+    inner: Client<HttpsConnector<HttpConnector>, SgBody>,
 }
 
 impl SgHttpClient {
@@ -31,6 +35,18 @@ impl SgHttpClient {
         let http_connector = HttpConnector::new();
         SgHttpClient {
             inner: Client::builder(TokioExecutor::new()).build(HttpsConnector::from((http_connector, tls_config))),
+        }
+    }
+    pub async fn request(&mut self, mut req: Request<SgBody>) -> Response<SgBody> {
+        let context = req.extensions_mut().remove::<SgContext>();
+        match self.inner.request(req).await.map_err(Response::internal_error) {
+            Ok(mut response) => {
+                if let Some(context) = context {
+                    response.extensions_mut().insert(context);
+                }
+                response.map(SgBody::new)
+            }
+            Err(err) => err,
         }
     }
 }
@@ -47,13 +63,9 @@ impl Service<Request<SgBody>> for SgHttpClient {
     }
 
     fn call(&mut self, req: Request<SgBody>) -> Self::Future {
-        let (context, req) = req.into_context();
-        let fut = self.inner.call(req).map_ok(|response| {
-            let (parts, body) = response.into_parts();
-            Response::<SgBody>::from_parts(parts, SgBody::with_context(body, context))
-        });
-        ResponseErrorFuture::new(DefaultErrorFormatter, fut).boxed()
+        let mut this = self.clone();
+        mem::swap(&mut this, self);
+        let fut = async move { this.request(req).map(Ok).await };
+        fut.boxed()
     }
 }
-
-

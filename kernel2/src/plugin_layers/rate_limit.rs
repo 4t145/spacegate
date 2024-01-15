@@ -12,6 +12,7 @@ use tower::util::BoxLayer;
 use tower_layer::Stack;
 
 use crate::{
+    context::SgContext,
     helper_layers::{
         async_filter::{AsyncFilter, AsyncFilterRequest, AsyncFilterRequestLayer},
         bidirection_filter::{Bdf, BdfLayer, BdfService},
@@ -92,23 +93,28 @@ tardis_static! {
 impl RateLimitConfig {
     async fn req_filter(&self, id: &str, req: Request<SgBody>) -> Result<Request<SgBody>, Response<SgBody>> {
         if let Some(max_request_number) = &self.max_request_number {
-            let result: &bool = &script()
-                // counter key
-                .key(format!("{CONF_LIMIT_KEY}{id}"))
-                // last counter reset timestamp key
-                .key(format!("{CONF_LIMIT_KEY}{id}_ts"))
-                // maximum number of request
-                .arg(max_request_number)
-                // time window
-                .arg(self.time_window_ms.unwrap_or(1000))
-                // current timestamp
-                .arg(SystemTime::now().duration_since(std::time::UNIX_EPOCH).expect("invalid system time: before unix epoch").as_millis() as u64)
-                .invoke_async(&mut req.body().context.cache().await.map_err(Response::<SgBody>::internal_error)?.cmd().await.map_err(Response::<SgBody>::internal_error)?)
-                .await
-                .map_err(|e| Response::<SgBody>::with_code_message(StatusCode::INTERNAL_SERVER_ERROR, format!("[SG.Filter.Limit] redis error: {e}")))?;
+            if let Some(context) = req.extensions().get::<SgContext>() {
+                let mut conn = context.cache().await.map_err(Response::<SgBody>::internal_error)?.cmd().await.map_err(Response::<SgBody>::internal_error)?;
+                let result: &bool = &script()
+                    // counter key
+                    .key(format!("{CONF_LIMIT_KEY}{id}"))
+                    // last counter reset timestamp key
+                    .key(format!("{CONF_LIMIT_KEY}{id}_ts"))
+                    // maximum number of request
+                    .arg(max_request_number)
+                    // time window
+                    .arg(self.time_window_ms.unwrap_or(1000))
+                    // current timestamp
+                    .arg(SystemTime::now().duration_since(std::time::UNIX_EPOCH).expect("invalid system time: before unix epoch").as_millis() as u64)
+                    .invoke_async(&mut conn)
+                    .await
+                    .map_err(|e| Response::<SgBody>::with_code_message(StatusCode::INTERNAL_SERVER_ERROR, format!("[SG.Filter.Limit] redis error: {e}")))?;
 
-            if !result {
-                return Err(Response::<SgBody>::with_code_message(StatusCode::TOO_MANY_REQUESTS, "[SG.Filter.Limit] too many requests"));
+                if !result {
+                    return Err(Response::<SgBody>::with_code_message(StatusCode::TOO_MANY_REQUESTS, "[SG.Filter.Limit] too many requests"));
+                }
+            } else {
+                // missing context
             }
         }
         Ok(req)

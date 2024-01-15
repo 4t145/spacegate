@@ -45,7 +45,7 @@ pub enum BackOff {
 #[serde(default)]
 pub struct RetryConfig {
     pub retries: u16,
-    pub retryable_methods: Vec<String>,
+    pub retirable_methods: Vec<String>,
     /// Backoff strategies can vary depending on the specific implementation and requirements.
     /// see [BackOff]
     pub backoff: BackOff,
@@ -59,7 +59,7 @@ impl Default for RetryConfig {
     fn default() -> Self {
         Self {
             retries: 3,
-            retryable_methods: vec!["*".to_string()],
+            retirable_methods: vec!["*".to_string()],
             backoff: BackOff::default(),
             base_interval: 100,
             //10 seconds
@@ -126,7 +126,7 @@ impl Policy<Request<SgBody>, Response<SgBody>, TardisError> for RetryPolicy {
     }
 
     fn clone_request(&self, req: &Request<SgBody>) -> Option<Request<SgBody>> {
-        if !req.body().is_dumpped() {
+        if !req.body().is_dumped() {
             Some(req.clone())
         } else {
             None
