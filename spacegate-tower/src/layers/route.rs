@@ -9,11 +9,9 @@ use tower_service::Service;
 use crate::SgBody;
 
 pub trait Router {
-    type Index;
-    fn route<B>(&self, req: &Request<B>) -> Option<Self::Index>;
+    type Index: Clone;
+    fn route(&self, req: &Request<SgBody>) -> Option<Self::Index>;
 }
-
-pub trait Services<Idx> {}
 
 pub struct Route<S, R, F>
 where
@@ -43,26 +41,36 @@ impl<S, R, F> Service<Request<SgBody>> for Route<S, R, F>
 where
     R: Router,
     S: IndexMut<R::Index>,
+    S::Output: Service<Request<SgBody>, Response = Response<SgBody>, Error = BoxError> + Send + 'static,
     F: Service<Request<SgBody>, Response = Response<SgBody>, Error = BoxError> + Send + 'static,
+    <F as Service<hyper::Request<SgBody>>>::Future: std::marker::Send,
+    <S::Output as Service<hyper::Request<SgBody>>>::Future: std::marker::Send,
 {
     type Error = BoxError;
     type Response = Response<SgBody>;
     type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
     fn poll_ready(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
-        let mut new_unready = Vec::new();
-        for idx in self.unready_services.drain(..) {
-            let service = &mut self.services[idx];
-            if let std::task::Poll::Ready(Ok(())) = service.poll_ready(cx) {
+        while let Some(idx) = self.unready_services.pop() {
+            let service = &mut self.services[idx.clone()];
+            if let std::task::Poll::Ready(result) = service.poll_ready(cx) {
+                result?;
                 continue;
             } else {
-                new_unready.push(idx);
+                self.unready_services.push(idx);
+                return std::task::Poll::Pending;
             }
-            self.unready_services.push(idx);
         }
+        std::task::Poll::Ready(Ok(()))
     }
 
     fn call(&mut self, req: Request<SgBody>) -> Self::Future {
-        todo!()
+        if let Some(index) = self.router.route(&req) {
+            let fut = self.services.index_mut(index).call(req);
+            Box::pin(fut)
+        } else {
+            let fut = self.fallback.call(req);
+            Box::pin(fut)
+        }
     }
 }
