@@ -50,10 +50,13 @@ where
     type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
     fn poll_ready(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
+        let mut new_unready = Vec::new();
         for idx in self.unready_services.drain(..) {
             let service = &mut self.services[idx];
             if let std::task::Poll::Ready(Ok(())) = service.poll_ready(cx) {
                 continue;
+            } else {
+                new_unready.push(idx);
             }
             self.unready_services.push(idx);
         }
