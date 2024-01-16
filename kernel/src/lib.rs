@@ -24,7 +24,6 @@ use config::{gateway_dto::SgGateway, http_route_dto::SgHttpRoute};
 use functions::{http_route, server};
 pub use http;
 pub use hyper;
-use plugins::filters::{self, SgPluginFilterDef};
 use tardis::{basic::result::TardisResult, log, tokio::signal};
 
 pub mod config;
@@ -32,7 +31,7 @@ pub mod constants;
 pub mod functions;
 pub mod helpers;
 pub mod instance;
-pub mod plugins;
+// pub mod plugins;
 
 #[inline]
 pub async fn startup_k8s(namespace: Option<String>) -> TardisResult<()> {
@@ -98,14 +97,4 @@ pub async fn wait_graceful_shutdown() -> TardisResult<()> {
         }
     }
     Ok(())
-}
-
-#[inline]
-pub fn register_filter_def(filter_def: impl SgPluginFilterDef + 'static) {
-    register_filter_def_boxed(Box::new(filter_def))
-}
-
-#[inline]
-pub fn register_filter_def_boxed(filter_def: Box<dyn SgPluginFilterDef>) {
-    filters::register_filter_def(filter_def.get_code().to_string(), filter_def)
 }

@@ -5,8 +5,12 @@ use std::{
 
 use hyper::{Request, Response, StatusCode, Uri};
 use serde::{Deserialize, Serialize};
-use spacegate_tower::helper_layers::filter::{Filter, FilterRequestLayer};
 use spacegate_tower::{helper_layers::filter::FilterRequest, SgResponseExt};
+use spacegate_tower::{
+    helper_layers::filter::{Filter, FilterRequestLayer},
+    plugin_layers::MakeSgLayer,
+    SgBoxLayer,
+};
 use tardis::{
     basic::{error::TardisError, result::TardisResult},
     url::Url,
@@ -14,6 +18,8 @@ use tardis::{
 use tower_layer::Layer;
 
 use spacegate_tower::{SgBody, SgBoxService};
+
+use crate::def_plugin;
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct SgHttpPathModifier {
@@ -37,7 +43,7 @@ pub enum SgHttpPathModifierType {
 /// RedirectFilter defines a filter that redirects a request.
 ///
 /// https://gateway-api.sigs.k8s.io/geps/gep-726/
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RedirectFilter {
     /// Scheme is the scheme to be used in the value of the Location header in the response. When empty, the scheme of the request is used.
     pub scheme: Option<String>,
@@ -83,3 +89,12 @@ impl Filter for RedirectFilter {
 
 pub type RedirectFilterLayer = FilterRequestLayer<RedirectFilter>;
 pub type Redirect<S> = FilterRequest<RedirectFilter, S>;
+
+impl MakeSgLayer for RedirectFilter {
+    fn make_layer(&self) -> Result<SgBoxLayer, tower::BoxError> {
+        let layer = FilterRequestLayer::new(self.clone());
+        Ok(SgBoxLayer::new(layer))
+    }
+}
+
+def_plugin!("redirect", RedirectPlugin, RedirectFilter);

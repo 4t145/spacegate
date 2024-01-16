@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use tower::{filter, BoxError};
+use tower::BoxError;
 
 use crate::{plugin_layers::MakeSgLayer, SgBoxLayer};
 

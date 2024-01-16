@@ -6,13 +6,6 @@ use tower_layer::Layer;
 use tower_service::Service;
 
 use crate::{SgBody, SgBoxLayer, SgBoxService};
-
-pub mod header_modifier;
-pub mod inject;
-pub mod rate_limit;
-pub mod redirect;
-pub mod retry;
-
 // pub mod comde;
 
 pub trait MakeSgLayer {

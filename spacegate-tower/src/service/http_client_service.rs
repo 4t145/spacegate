@@ -1,15 +1,17 @@
-use std::{convert::Infallible, mem, pin::Pin, sync::Arc};
+use std::{convert::Infallible, mem, pin::Pin, sync::Arc, time::Duration};
 
 use crate::{
-    context::SgContext,
     helper_layers::response_error::{DefaultErrorFormatter, ResponseError, ResponseErrorFuture},
     plugin_layers::MakeSgLayer,
-    SgBody, SgRequestExt, SgResponseExt,
+    SgBody, SgRequestExt, SgResponseExt, extension::reflect::Reflect,
 };
 use futures_util::{Future, FutureExt, TryFutureExt};
 use http_body_util::combinators::BoxBody;
-use hyper::body::{Body, Bytes};
 use hyper::{body::Incoming, Request, Response};
+use hyper::{
+    body::{Body, Bytes},
+    StatusCode,
+};
 use hyper_rustls::HttpsConnector;
 use hyper_util::{
     client::legacy::{connect::HttpConnector, Builder, Client},
@@ -38,15 +40,23 @@ impl SgHttpClient {
         }
     }
     pub async fn request(&mut self, mut req: Request<SgBody>) -> Response<SgBody> {
-        let context = req.extensions_mut().remove::<SgContext>();
+        let reflect = req.extensions_mut().remove::<Reflect>();
         match self.inner.request(req).await.map_err(Response::internal_error) {
             Ok(mut response) => {
-                if let Some(context) = context {
-                    response.extensions_mut().insert(context);
+                if let Some(reflect) = reflect {
+                    response.extensions_mut().insert(reflect);
                 }
                 response.map(SgBody::new)
             }
             Err(err) => err,
+        }
+    }
+    pub async fn request_timeout(&mut self, req: Request<SgBody>, timeout: Duration) -> Response<SgBody> {
+        let fut = self.request(req);
+        let resp = tardis::tokio::time::timeout(timeout, fut).await;
+        match resp {
+            Ok(resp) => resp,
+            Err(_) => Response::with_code_message(StatusCode::GATEWAY_TIMEOUT, "request timeout"),
         }
     }
 }

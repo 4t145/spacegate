@@ -1,44 +1,43 @@
+use crate::{SgBody, SgBoxService};
+use futures_util::ready;
 use hyper::{Request, Response};
 use pin_project_lite::pin_project;
-use tower::BoxError;
 use std::{
+    convert::Infallible,
     future::Future,
     pin::Pin,
-    task::{Context, Poll}, convert::Infallible,
+    task::{Context, Poll}, sync::Arc,
 };
-use tardis::{
-    basic::{result::TardisResult},
-};
-use futures_util::ready;
+pub use tower::util::{MapFuture, MapRequest, MapResponse};
 use tower_layer::Layer;
 use tower_service::Service;
-pub use tower::util::{MapRequest, MapResponse, MapFuture};
-use crate::{SgBoxService, SgBody};
 
 /// Bi-Direction Filter
 pub trait Bdf: Send + Sync {
     type FutureReq: Future<Output = Result<Request<SgBody>, Response<SgBody>>> + Send;
     type FutureResp: Future<Output = Response<SgBody>> + Send;
 
-    fn on_req(&self, req: Request<SgBody>) -> Self::FutureReq;
-    fn on_resp(&self, resp: Response<SgBody>) -> Self::FutureResp;
+    fn on_req(self: Arc<Self>, req: Request<SgBody>) -> Self::FutureReq;
+    fn on_resp(self: Arc<Self>, resp: Response<SgBody>) -> Self::FutureResp;
 }
 
 /// Bi-Direction Filter Layer
+#[derive(Debug, Clone)]
 pub struct BdfLayer<F> {
-    filter: F,
+    filter: Arc<F>,
 }
 
 impl<F> BdfLayer<F> {
     pub fn new(filter: F) -> Self {
-        Self { filter }
+        Self { filter: Arc::new(filter) }
     }
 }
 
 pin_project! {
+    #[derive(Debug, Clone)]
     pub struct BdfService<F, S> {
         #[pin]
-        filter: F,
+        filter: Arc<F>,
         service: S,
     }
 }
@@ -125,7 +124,7 @@ where
         loop {
             match this.state.as_mut().project() {
                 FilterFutureStateProj::Start => {
-                    let fut = this.filter.filter.on_req(this.request.take().expect("missing request at start state"));
+                    let fut = this.filter.filter.clone().on_req(this.request.take().expect("missing request at start state"));
                     this.state.set(FilterFutureState::Request { fut });
                 }
                 FilterFutureStateProj::Request { fut } => {
@@ -142,7 +141,7 @@ where
                 }
                 FilterFutureStateProj::InnerCall { fut } => {
                     let request_result = ready!(fut.poll(cx))?;
-                    let fut = this.filter.filter.on_resp(request_result);
+                    let fut = this.filter.filter.clone().on_resp(request_result);
                     this.state.set(FilterFutureState::Response { fut });
                 }
                 FilterFutureStateProj::Response { fut } => {
@@ -153,3 +152,6 @@ where
         }
     }
 }
+
+pub type BoxReqFut = Pin<Box<dyn Future<Output = Result<Request<SgBody>, Response<SgBody>>> + Send>>;
+pub type BoxRespFut = Pin<Box<dyn Future<Output = Response<SgBody>> + Send>>;

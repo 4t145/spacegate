@@ -1,7 +1,7 @@
 use http_body_util::{combinators::BoxBody, BodyExt, Empty, Full};
 use hyper::body::{Body, Bytes};
 
-use crate::{context::SgContext, utils::never};
+use crate::utils::never;
 
 pub mod compress;
 pub mod decompress;

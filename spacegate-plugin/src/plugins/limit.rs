@@ -13,16 +13,15 @@ use tower::util::BoxLayer;
 use tower_layer::Stack;
 
 use spacegate_tower::{
-    context::SgContext,
     helper_layers::async_filter::{AsyncFilter, AsyncFilterRequest, AsyncFilterRequestLayer},
     plugin_layers::MakeSgLayer,
-    SgBody, SgBoxLayer, SgResponseExt,
+    SgBody, SgBoxLayer, SgResponseExt, extension::{reflect::Reflect, gateway_name::GatewayName},
 };
 
-use crate::def_plugin;
+use crate::{def_plugin, cache::Cache};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RateLimitPlugin {
+pub struct RateLimitConfig {
     pub max_request_number: Option<u64>,
     pub time_window_ms: Option<u64>,
     pub id: String,
@@ -90,12 +89,12 @@ tardis_static! {
     );
 }
 
-impl RateLimitPlugin {
+impl RateLimitConfig {
     async fn req_filter(&self, req: Request<SgBody>) -> Result<Request<SgBody>, Response<SgBody>> {
         let id = &self.id;
         if let Some(max_request_number) = &self.max_request_number {
-            if let Some(context) = req.extensions().get::<SgContext>() {
-                let mut conn = context.cache().await.map_err(Response::<SgBody>::internal_error)?.cmd().await.map_err(Response::<SgBody>::internal_error)?;
+            if let Some(gateway_name) = req.extensions().get::<Reflect>().and_then(|r|r.get::<GatewayName>()) {
+                let mut conn = Cache::get(gateway_name).await.map_err(Response::<SgBody>::internal_error)?.cmd().await.map_err(Response::<SgBody>::internal_error)?;
                 let result: &bool = &script()
                     // counter key
                     .key(format!("{CONF_LIMIT_KEY}{id}"))
@@ -124,7 +123,7 @@ impl RateLimitPlugin {
 
 #[derive(Debug, Clone)]
 pub struct RateLimitFilter {
-    pub config: Arc<RateLimitPlugin>,
+    pub config: Arc<RateLimitConfig>,
 }
 
 impl AsyncFilter for RateLimitFilter {
@@ -138,11 +137,11 @@ impl AsyncFilter for RateLimitFilter {
 pub type RateLimitLayer = AsyncFilterRequestLayer<RateLimitFilter>;
 pub type RateLimit<S> = AsyncFilterRequest<RateLimitFilter, S>;
 
-impl MakeSgLayer for RateLimitPlugin {
+impl MakeSgLayer for RateLimitConfig {
     fn make_layer(&self) -> Result<SgBoxLayer, tower::BoxError> {
         let layer = RateLimitLayer::new(RateLimitFilter { config: Arc::new(self.clone()) });
         Ok(SgBoxLayer::new(layer))
     }
 }
 
-def_plugin!("limit", RateLimitPluginDef, RateLimitPlugin);
+def_plugin!("limit", RateLimitPlugin, RateLimitConfig);

@@ -1,26 +1,36 @@
-use std::{future::Future, pin::Pin, sync::Arc, task::ready, time::Duration};
+use std::{convert::Infallible, future::Future, pin::Pin, sync::Arc, task::ready, time::Duration};
 
 use hyper::{Request, Response};
 use pin_project_lite::pin_project;
 use serde::{Deserialize, Serialize};
 use tardis::{
-    basic::error::TardisError,
     rand::{self, Rng},
     tokio::{self, time::Sleep},
 };
-use tower::retry::{Policy, Retry as TowerRetry, RetryLayer};
+use tower::retry::{Policy, Retry as TowerRetry, RetryLayer as TowerRetryLayer};
 use tower_layer::Layer;
 
 use spacegate_tower::{
     helper_layers::async_filter::{dump::Dump, AsyncFilterRequest, AsyncFilterRequestLayer},
-    SgBody,
+    plugin_layers::MakeSgLayer,
+    SgBody, SgBoxLayer,
 };
 
-pub struct Retry {
-    inner_layer: RetryLayer<RetryPolicy>,
+use crate::def_plugin;
+
+pub struct RetryLayer {
+    inner_layer: TowerRetryLayer<RetryPolicy>,
 }
 
-impl<S> Layer<S> for Retry {
+impl RetryLayer {
+    pub fn new(policy: RetryPolicy) -> Self {
+        Self {
+            inner_layer: TowerRetryLayer::new(policy),
+        }
+    }
+}
+
+impl<S> Layer<S> for RetryLayer {
     type Service = AsyncFilterRequest<Dump, TowerRetry<RetryPolicy, S>>;
 
     fn layer(&self, service: S) -> Self::Service {
@@ -100,10 +110,10 @@ impl<T> Future for Delay<T> {
     }
 }
 
-impl Policy<Request<SgBody>, Response<SgBody>, TardisError> for RetryPolicy {
+impl Policy<Request<SgBody>, Response<SgBody>, Infallible> for RetryPolicy {
     type Future = Delay<Self>;
 
-    fn retry(&self, _req: &Request<SgBody>, result: Result<&Response<SgBody>, &TardisError>) -> Option<Self::Future> {
+    fn retry(&self, _req: &Request<SgBody>, result: Result<&Response<SgBody>, &Infallible>) -> Option<Self::Future> {
         if self.times < self.config.retries.into() && result.is_err() {
             let delay = match self.config.backoff {
                 BackOff::Fixed => self.config.base_interval,
@@ -133,3 +143,16 @@ impl Policy<Request<SgBody>, Response<SgBody>, TardisError> for RetryPolicy {
         }
     }
 }
+
+impl MakeSgLayer for RetryConfig {
+    fn make_layer(&self) -> Result<spacegate_tower::SgBoxLayer, tower::BoxError> {
+        let policy = RetryPolicy {
+            times: 0,
+            config: Arc::new(self.clone()),
+        };
+        let layer = RetryLayer::new(policy);
+        Ok(SgBoxLayer::new(layer))
+    }
+}
+
+def_plugin!("retry", RetryPlugin, RetryConfig);

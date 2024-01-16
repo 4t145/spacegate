@@ -7,15 +7,11 @@ use crate::{
         http_route_dto::{SgHttpHeaderMatchType, SgHttpPathMatchType, SgHttpQueryMatchType, SgHttpRoute},
     },
     instance::{SgHttpPathMatchInst, SgHttpRouteInst, SgHttpRouteMatchInst, SgHttpRouteRuleInst},
-    plugins::{
-        context::{ChosenHttpRouteRuleInst, SgRouteFilterRequestAction, SgRoutePluginContext},
-        filters::{self, BoxSgPluginFilter, SgPluginFilterInitDto},
-    },
+
 };
 use http::{header::UPGRADE, HeaderValue, Request, Response};
 use hyper::{Body, StatusCode};
 
-use crate::plugins::context::AvailableBackendInst;
 use itertools::Itertools;
 use std::sync::{Arc, OnceLock};
 use std::vec::Vec;

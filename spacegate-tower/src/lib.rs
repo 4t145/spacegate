@@ -1,13 +1,14 @@
 // pub mod config;
 pub mod body;
-pub mod context;
+pub mod extension;
 pub mod helper_layers;
 pub mod plugin_layers;
-pub mod route_layers;
+pub mod layers;
 pub mod service;
 pub mod utils;
 
 pub use body::SgBody;
+use extension::reflect::Reflect;
 use std::{
     convert::Infallible,
     fmt::{self, Display},
@@ -15,7 +16,6 @@ use std::{
 };
 
 use body::dump::Dump;
-use context::SgContext;
 use helper_layers::response_error::ErrorFormatter;
 use http_body_util::{combinators::BoxBody, BodyExt, Empty, Full};
 
@@ -30,10 +30,14 @@ use tower_service::Service;
 use utils::{fold_sg_layers::fold_sg_layers, never};
 
 pub trait SgRequestExt {
+    fn with_reflect(&mut self);
     // fn into_context(self) -> (SgContext, Request<BoxBody<Bytes, hyper::Error>>);
 }
 
 impl SgRequestExt for Request<SgBody> {
+    fn with_reflect(&mut self) {
+        self.extensions_mut().insert(Reflect::new());
+    }
     // fn into_context(self) -> (SgContext, Request<BoxBody<Bytes, hyper::Error>>) {
     //     let (parts, body) = self.into_parts();
     //     let (context, body) = body.into_context();
@@ -61,7 +65,9 @@ pub trait SgResponseExt {
 impl SgResponseExt for Response<SgBody> {
     fn with_code_message(code: StatusCode, message: impl Into<Bytes>) -> Self {
         let body = SgBody::full(message);
-        Response::builder().status(code).body(body).expect("response builder error")
+        let mut resp = Response::builder().status(code).body(body).expect("response builder error");
+        resp.extensions_mut().insert(Reflect::new());
+        resp
     }
 }
 
@@ -145,7 +151,7 @@ mod test {
     use crate::{
         helper_layers::filter::{response_anyway::ResponseAnyway, FilterRequestLayer},
         plugin_layers::SgLayer,
-        route_layers::http_route::{
+        layers::http_route::{
             match_request::{MatchRequest, SgHttpPathMatch, SgHttpRouteMatch},
             SgHttpBackendLayer, SgHttpRouteLayer, SgHttpRouteRuleLayer,
         },

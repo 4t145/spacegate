@@ -1,14 +1,15 @@
 use std::{
     collections::HashMap,
-    sync::{Arc, RwLock},
+    sync::{Arc, OnceLock, RwLock},
 };
 
 use spacegate_tower::plugin_layers::MakeSgLayer;
-pub use tardis::serde_json::{Error as SerdeJsonError, Value as JsonValue};
 pub use tardis::serde_json;
+pub use tardis::serde_json::{Error as SerdeJsonError, Value as JsonValue};
 use tower::BoxError;
 
 pub mod plugins;
+pub mod cache;
 
 pub trait Plugin {
     type Error: std::error::Error + Send + Sync + 'static;
@@ -17,13 +18,26 @@ pub trait Plugin {
     fn create(value: JsonValue) -> Result<Self::MakeLayer, Self::Error>;
 }
 
-type BoxCreateFn = Box<dyn Fn(JsonValue) -> Result<Box<dyn MakeSgLayer>, BoxError>>;
+type BoxCreateFn = Box<dyn Fn(JsonValue) -> Result<Box<dyn MakeSgLayer>, BoxError> + Send + Sync>;
 #[derive(Default, Clone)]
 pub struct SgPluginTypeMap {
     pub map: Arc<RwLock<HashMap<&'static str, BoxCreateFn>>>,
 }
 
 impl SgPluginTypeMap {
+    pub fn global() -> &'static Self {
+        static INIT: OnceLock<SgPluginTypeMap> = OnceLock::new();
+        INIT.get_or_init(SgPluginTypeMap::new)
+    }
+
+    pub fn register_prelude(&self) {
+        self.register::<plugins::limit::RateLimitPlugin>();
+        self.register::<plugins::redirect::RedirectPlugin>();
+        self.register::<plugins::retry::RetryPlugin>();
+        self.register::<plugins::header_modifier::HeaderModifierPlugin>();
+        self.register::<plugins::inject::InjectPlugin>();
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
@@ -36,7 +50,7 @@ impl SgPluginTypeMap {
 
     pub fn register_custom<F, M, E>(&self, code: &'static str, f: F)
     where
-        F: Fn(JsonValue) -> Result<M, E> + 'static,
+        F: Fn(JsonValue) -> Result<M, E> + 'static + Send + Sync,
         M: MakeSgLayer + 'static,
         E: std::error::Error + Send + Sync + 'static,
     {
