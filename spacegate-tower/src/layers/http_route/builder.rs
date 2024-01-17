@@ -4,12 +4,13 @@ use tower::BoxError;
 
 use crate::{plugin_layers::MakeSgLayer, SgBoxLayer};
 
-use super::{match_request::SgHttpRouteMatch, SgHttpBackendLayer, SgHttpRouteLayer, SgHttpRouteRuleLayer};
+use super::{match_request::SgHttpRouteMatch, SgHttpBackendLayer, SgHttpRoute, SgHttpRouteRuleLayer};
 
 #[derive(Debug)]
 pub struct SgHttpRouteLayerBuilder {
     pub hostnames: Vec<String>,
     pub rules: Vec<SgHttpRouteRuleLayer>,
+    pub plugins: Result<Vec<SgBoxLayer>, BoxError>,
     pub fallback: Result<SgHttpRouteRuleLayer, BoxError>,
 }
 
@@ -24,6 +25,7 @@ impl SgHttpRouteLayerBuilder {
         Self {
             hostnames: Vec::new(),
             rules: Vec::new(),
+            plugins: Ok(Vec::new()),
             fallback: Err(BoxError::from("No fallback route specified")),
         }
     }
@@ -35,19 +37,29 @@ impl SgHttpRouteLayerBuilder {
         self.rules.push(rule);
         self
     }
-    pub fn fallback(mut self, fallback: SgHttpRouteRuleLayer) -> Self {
-        self.fallback = Ok(fallback);
+    pub fn plugin(mut self, plugin: impl MakeSgLayer) -> Self {
+        if let Ok(plugins) = self.plugins.as_mut() {
+            let new_plugin = plugin.make_layer();
+            match new_plugin {
+                Ok(new_plugin) => {
+                    plugins.push(new_plugin);
+                }
+                Err(e) => {
+                    self.plugins = Err(e);
+                }
+            }
+        }
         self
     }
-    pub fn build(self) -> Result<SgHttpRouteLayer, BoxError> {
+    pub fn build(self) -> Result<SgHttpRoute, BoxError> {
         let mut rules = vec![self.fallback?];
         for r in self.rules.into_iter() {
             rules.push(r);
         }
-        Ok(SgHttpRouteLayer {
+        Ok(SgHttpRoute {
+            plugins: Arc::from(self.plugins?),
             hostnames: self.hostnames.into(),
             rules: rules.into(),
-            fallback_index: 0,
         })
     }
 }
@@ -55,7 +67,7 @@ impl SgHttpRouteLayerBuilder {
 #[derive(Debug)]
 pub struct SgHttpRouteRuleLayerBuilder {
     r#match: Option<SgHttpRouteMatch>,
-    filters: Result<Vec<SgBoxLayer>, BoxError>,
+    plugins: Result<Vec<SgBoxLayer>, BoxError>,
     timeouts: Option<Duration>,
     backends: Vec<SgHttpBackendLayer>,
 }
@@ -69,7 +81,7 @@ impl SgHttpRouteRuleLayerBuilder {
     pub fn new() -> Self {
         Self {
             r#match: None,
-            filters: Ok(Vec::new()),
+            plugins: Ok(Vec::new()),
             timeouts: None,
             backends: Vec::new(),
         }
@@ -82,15 +94,15 @@ impl SgHttpRouteRuleLayerBuilder {
         self.r#match = None;
         self
     }
-    pub fn filter(mut self, filter: impl MakeSgLayer) -> Self {
-        if let Ok(filters) = self.filters.as_mut() {
-            let new_filter = filter.make_layer();
-            match new_filter {
-                Ok(new_filter) => {
-                    filters.push(new_filter);
+    pub fn plugin(mut self, plugin: impl MakeSgLayer) -> Self {
+        if let Ok(plugins) = self.plugins.as_mut() {
+            let new_plugin = plugin.make_layer();
+            match new_plugin {
+                Ok(new_plugin) => {
+                    plugins.push(new_plugin);
                 }
                 Err(e) => {
-                    self.filters = Err(e.into());
+                    self.plugins = Err(e.into());
                 }
             }
         }
@@ -107,7 +119,7 @@ impl SgHttpRouteRuleLayerBuilder {
     pub fn build(self) -> Result<SgHttpRouteRuleLayer, BoxError> {
         Ok(SgHttpRouteRuleLayer {
             r#match: self.r#match.into(),
-            filters: Arc::from(self.filters?),
+            plugins: Arc::from(self.plugins?),
             timeouts: self.timeouts,
             backends: Arc::from_iter(self.backends),
         })

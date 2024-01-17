@@ -153,7 +153,7 @@ mod test {
         plugin_layers::SgLayer,
         layers::http_route::{
             match_request::{MatchRequest, SgHttpPathMatch, SgHttpRouteMatch},
-            SgHttpBackendLayer, SgHttpRouteLayer, SgHttpRouteRuleLayer,
+            SgHttpBackendLayer, SgHttpRoute, SgHttpRouteRuleLayer,
         },
         service::http_client_service::SgHttpClient,
         SgBody, SgResponseExt,
@@ -185,21 +185,10 @@ mod test {
             ..Default::default()
         };
         dbg!(r#match.match_request(&request));
-        let http_router = SgHttpRouteLayer::builder()
+        let http_router = SgHttpRoute::builder()
             .hostnames(Some("example.com".to_string()))
             .rule(SgHttpRouteRuleLayer::builder().r#match(r#match).timeout(Duration::from_secs(5)).backend(SgHttpBackendLayer::builder().build()?).build()?)
-            .fallback(
-                SgHttpRouteRuleLayer::builder()
-                    .backend(
-                        SgHttpBackendLayer::builder()
-                            .plugin(SgLayer(FilterRequestLayer::new(ResponseAnyway {
-                                status: hyper::StatusCode::NOT_FOUND,
-                                message: "[Sg.HttpRouteRule] no rule matched".to_string().into(),
-                            })))
-                            .build()?,
-                    )
-                    .build()?,
-            )
+            
             .build()?;
         let mut test_service = http_router.layer(EchoService);
         let (parts, body) =

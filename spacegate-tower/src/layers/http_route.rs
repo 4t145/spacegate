@@ -2,10 +2,18 @@ mod builder;
 pub mod match_request;
 mod picker;
 mod predicate;
-use std::{convert::Infallible, sync::Arc, time::Duration};
+use std::{
+    convert::Infallible,
+    ops::{Index, IndexMut},
+    sync::Arc,
+    time::Duration,
+};
 
 use crate::{
-    helper_layers::filter::{FilterRequest, FilterRequestLayer},
+    helper_layers::{
+        filter::{FilterRequest, FilterRequestLayer},
+        route::{Route, Router},
+    },
     plugin_layers::MakeSgLayer,
     utils::fold_sg_layers::fold_sg_layers,
     SgBody, SgBoxLayer, SgBoxService,
@@ -22,10 +30,12 @@ use tower_service::Service;
 
 use self::{
     builder::{SgHttpBackendLayerBuilder, SgHttpRouteLayerBuilder, SgHttpRouteRuleLayerBuilder},
-    match_request::SgHttpRouteMatch,
+    match_request::{MatchRequest, SgHttpRouteMatch},
     picker::{RouteByMatches, RouteByWeight},
     predicate::FilterByHostnames,
 };
+
+
 
 /****************************************************************************************
 
@@ -34,60 +44,21 @@ use self::{
 *****************************************************************************************/
 
 #[derive(Debug, Clone)]
-pub struct SgHttpRouteLayer {
+pub struct SgHttpRoute {
     pub hostnames: Arc<[String]>,
+    pub plugins: Arc<[SgBoxLayer]>,
     pub rules: Arc<[SgHttpRouteRuleLayer]>,
-    pub fallback_index: usize,
 }
 
-impl SgHttpRouteLayer {
+impl SgHttpRoute {
     pub fn builder() -> SgHttpRouteLayerBuilder {
         SgHttpRouteLayerBuilder::new()
     }
 }
 #[derive(Clone)]
-pub struct SgHttpRoute {
+pub struct SgHttpRouter {
     pub hostnames: Arc<[String]>,
-    inner: FilterRequest<FilterByHostnames, Steer<SgRouteRule, RouteByMatches, Request<SgBody>>>,
-}
-
-impl<S> Layer<S> for SgHttpRouteLayer
-where
-    S: Clone + Service<Request<SgBody>, Error = Infallible, Response = Response<SgBody>> + Send + Sync + 'static,
-    <S as tower_service::Service<Request<SgBody>>>::Future: std::marker::Send,
-{
-    type Service = SgHttpRoute;
-
-    fn layer(&self, inner: S) -> Self::Service {
-        let steer = <Steer<_, _, Request<SgBody>>>::new(
-            self.rules.iter().map(|l| l.layer(inner.clone())),
-            RouteByMatches {
-                fallback_index: self.fallback_index,
-            },
-        );
-        let filtered = FilterRequestLayer::new(FilterByHostnames {
-            hostnames: self.hostnames.clone(),
-        })
-        .layer(steer);
-        SgHttpRoute {
-            hostnames: self.hostnames.clone(),
-            inner: filtered,
-        }
-    }
-}
-
-impl Service<Request<SgBody>> for SgHttpRoute {
-    type Response = Response<SgBody>;
-    type Error = Infallible;
-    type Future = <SgBoxService as Service<Request<SgBody>>>::Future;
-
-    fn call(&mut self, req: Request<SgBody>) -> Self::Future {
-        Box::pin(self.inner.call(req))
-    }
-
-    fn poll_ready(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
-        self.inner.poll_ready(cx)
-    }
+    pub rules: Arc<[Arc<Option<SgHttpRouteMatch>>]>,
 }
 
 /****************************************************************************************
@@ -98,8 +69,8 @@ impl Service<Request<SgBody>> for SgHttpRoute {
 
 #[derive(Debug, Clone)]
 pub struct SgHttpRouteRuleLayer {
-    r#match: Arc<Option<SgHttpRouteMatch>>,
-    filters: Arc<[SgBoxLayer]>,
+    pub r#match: Arc<Option<SgHttpRouteMatch>>,
+    pub plugins: Arc<[SgBoxLayer]>,
     timeouts: Option<Duration>,
     backends: Arc<[SgHttpBackendLayer]>,
 }
@@ -119,7 +90,7 @@ where
 
     fn layer(&self, inner: S) -> Self::Service {
         let steer = <Steer<_, _, Request<SgBody>>>::new(self.backends.iter().map(|l| l.layer(inner.clone())), RouteByWeight);
-        let filter_layer = self.filters.iter().collect::<SgBoxLayer>();
+        let filter_layer = self.plugins.iter().collect::<SgBoxLayer>();
         let service = if let Some(timeout) = self.timeouts {
             SgBoxService::new(TimeoutLayer::new(timeout).layer(filter_layer.layer(steer)))
         } else {
@@ -133,8 +104,8 @@ where
 }
 #[derive(Clone)]
 pub struct SgRouteRule {
-    r#match: Arc<Option<SgHttpRouteMatch>>,
-    service: SgBoxService,
+    pub r#match: Arc<Option<SgHttpRouteMatch>>,
+    pub service: SgBoxService,
 }
 
 impl Service<Request<SgBody>> for SgRouteRule {
