@@ -35,7 +35,6 @@ async-compression.workspace = true
 
 tardis = { workspace = true, features = ["future", "crypto", "tls"] }
 http.workspace = true
-rustls = { workspace = true, features = ["dangerous_configuration"] }
 hyper.workspace = true
 hyper-rustls.workspace = true
 rustls-pemfile.workspace = true

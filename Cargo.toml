@@ -41,9 +41,6 @@ tardis = { version = "=0.1.0-rc.8" }
 http = { version = "0.2" }
 rustls = { version = "0.21.0" }
 hyper = { version = "1", features = ["full"] }
-hyper-rustls = { version = "0.24" }
-rustls-pemfile = { version = "1" }
-tokio-rustls = { version = "0.24", default-features = false }
 
 # K8s
 kube = { version = "0.85", features = ["runtime", "derive"] }
@@ -64,3 +61,8 @@ async-compression = { version = "0.3.13", default-features = false, features = [
 
 
 bytes = { version = "1" }
+
+# Tls
+hyper-rustls = { version = "0.26" }
+rustls-pemfile = "2.0.0" 
+tokio-rustls = { version = "0.25.0", default-features = false}

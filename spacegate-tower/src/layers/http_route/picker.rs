@@ -1,4 +1,4 @@
-use tardis::rand::{self, distributions::Distribution};
+use rand::{self, distributions::Distribution};
 use tower::steer::Picker;
 
 use crate::{Request, SgBody};

@@ -1,5 +1,6 @@
+use std::convert::Infallible;
+
 use hyper::{header::UPGRADE, Request, Response, StatusCode};
-use tardis::tokio;
 use tower::BoxError;
 use tower::ServiceExt;
 use tower_service::Service;
@@ -7,14 +8,16 @@ use tower_service::Service;
 use crate::service::http_client_service::get_client;
 use crate::service::http_client_service::SgHttpClient;
 use crate::SgBody;
+use crate::SgBoxLayer;
+use crate::SgBoxService;
 use crate::SgResponseExt;
 pub mod http_client_service;
 pub mod ws_client_service;
 
 /// Http backend service
-/// 
+///
 /// This function could be a bottom layer of a http router, it will handle http and websocket request.
-pub async fn http_backend_service(req: Request<SgBody>) -> Result<Response<SgBody>, BoxError> {
+pub async fn http_backend_service_inner(req: Request<SgBody>) -> Result<Response<SgBody>, BoxError> {
     let mut client = get_client();
     if let Some(upgrade) = req.headers().get(UPGRADE) {
         if !upgrade.as_bytes().eq_ignore_ascii_case(b"websocket") {
@@ -41,4 +44,15 @@ pub async fn http_backend_service(req: Request<SgBody>) -> Result<Response<SgBod
         let resp = client.request(req).await;
         Ok(resp)
     }
+}
+
+pub async fn http_backend_service(req: Request<SgBody>) -> Result<Response<SgBody>, Infallible> {
+    match http_backend_service_inner(req).await {
+        Ok(resp) => Ok(resp),
+        Err(err) => Ok(Response::with_code_message(StatusCode::INTERNAL_SERVER_ERROR, format!("[Sg.Client] Client error: {err}"))),
+    }
+}
+
+pub fn get_http_backend_service() -> SgBoxService {
+    SgBoxService::new(tower::util::service_fn(http_backend_service))
 }

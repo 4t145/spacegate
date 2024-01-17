@@ -31,6 +31,7 @@ pub mod constants;
 pub mod functions;
 pub mod helpers;
 pub mod instance;
+pub mod service;
 // pub mod plugins;
 
 #[inline]
@@ -58,21 +59,17 @@ pub async fn startup(k8s_mode: bool, namespace_or_conf_uri: Option<String>, chec
 }
 
 pub async fn do_startup(gateway: SgGateway, http_routes: Vec<SgHttpRoute>) -> TardisResult<()> {
-    // Initialize service instances
-    let server_insts = server::init(&gateway).await?;
-    let gateway_name = &gateway.name.clone();
     #[cfg(feature = "cache")]
     {
+        let gateway_name = &gateway.name.clone();
         // Initialize cache instances
         if let Some(url) = &gateway.parameters.redis_url {
             log::trace!("Initialize cache client...url:{url}");
             functions::cache_client::init(gateway_name, url).await?;
         }
     }
-    // Initialize route instances
-    http_route::init(gateway, http_routes).await?;
-    // Start service instances
-    server::startup(gateway_name, server_insts).await
+    // Initialize service instances
+    let running_gateway = server::RunningSgGateway::start(&gateway)?;
 }
 
 pub async fn shutdown(gateway_name: &str) -> TardisResult<()> {

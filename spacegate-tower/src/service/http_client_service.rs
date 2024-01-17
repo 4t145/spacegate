@@ -1,5 +1,5 @@
 use std::{convert::Infallible, mem, pin::Pin, sync::Arc, time::Duration};
-
+use tokio_rustls::rustls;
 use crate::{
     helper_layers::response_error::{DefaultErrorFormatter, ResponseError, ResponseErrorFuture},
     plugin_layers::MakeSgLayer,
@@ -53,7 +53,7 @@ impl SgHttpClient {
     }
     pub async fn request_timeout(&mut self, req: Request<SgBody>, timeout: Duration) -> Response<SgBody> {
         let fut = self.request(req);
-        let resp = tardis::tokio::time::timeout(timeout, fut).await;
+        let resp = tokio::time::timeout(timeout, fut).await;
         match resp {
             Ok(resp) => resp,
             Err(_) => Response::with_code_message(StatusCode::GATEWAY_TIMEOUT, "request timeout"),

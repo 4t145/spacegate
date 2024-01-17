@@ -10,8 +10,7 @@ use super::{match_request::SgHttpRouteMatch, SgHttpBackendLayer, SgHttpRoute, Sg
 pub struct SgHttpRouteLayerBuilder {
     pub hostnames: Vec<String>,
     pub rules: Vec<SgHttpRouteRuleLayer>,
-    pub plugins: Result<Vec<SgBoxLayer>, BoxError>,
-    pub fallback: Result<SgHttpRouteRuleLayer, BoxError>,
+    pub plugins: Vec<SgBoxLayer>,
 }
 
 impl Default for SgHttpRouteLayerBuilder {
@@ -25,8 +24,7 @@ impl SgHttpRouteLayerBuilder {
         Self {
             hostnames: Vec::new(),
             rules: Vec::new(),
-            plugins: Ok(Vec::new()),
-            fallback: Err(BoxError::from("No fallback route specified")),
+            plugins: Vec::new(),
         }
     }
     pub fn hostnames(mut self, hostnames: impl IntoIterator<Item = String>) -> Self {
@@ -37,29 +35,15 @@ impl SgHttpRouteLayerBuilder {
         self.rules.push(rule);
         self
     }
-    pub fn plugin(mut self, plugin: impl MakeSgLayer) -> Self {
-        if let Ok(plugins) = self.plugins.as_mut() {
-            let new_plugin = plugin.make_layer();
-            match new_plugin {
-                Ok(new_plugin) => {
-                    plugins.push(new_plugin);
-                }
-                Err(e) => {
-                    self.plugins = Err(e);
-                }
-            }
-        }
+    pub fn plugin(mut self, plugin: SgBoxLayer) -> Self {
+        self.plugins.push(plugin);
         self
     }
     pub fn build(self) -> Result<SgHttpRoute, BoxError> {
-        let mut rules = vec![self.fallback?];
-        for r in self.rules.into_iter() {
-            rules.push(r);
-        }
         Ok(SgHttpRoute {
-            plugins: Arc::from(self.plugins?),
+            plugins: Arc::from(self.plugins),
             hostnames: self.hostnames.into(),
-            rules: rules.into(),
+            rules: self.rules.into(),
         })
     }
 }

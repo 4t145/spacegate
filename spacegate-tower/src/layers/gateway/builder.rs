@@ -1,39 +1,51 @@
-use crate::{layers::http_route::SgHttpRouter, SgBoxLayer, helper_layers::filter::{FilterRequestLayer, response_anyway::ResponseAnyway}};
+use crate::{
+    helper_layers::filter::{response_anyway::ResponseAnyway, FilterRequestLayer},
+    layers::http_route::{SgHttpRoute, SgHttpRouter},
+    SgBoxLayer,
+};
+
+use super::SgGatewayLayer;
 
 pub struct SgGatewayLayerBuilder {
-    routers: Vec<SgHttpRouter>,
-    plugins: Vec<SgBoxLayer>,
-    fallback: SgBoxLayer,
+    http_routers: Vec<SgHttpRoute>,
+    http_plugins: Vec<SgBoxLayer>,
+    http_fallback: SgBoxLayer,
+}
+
+impl Default for SgGatewayLayerBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SgGatewayLayerBuilder {
     pub fn new() -> Self {
         Self {
-            routers: Vec::new(),
-            plugins: Vec::new(),
-            fallback: SgBoxLayer::new(FilterRequestLayer::new(ResponseAnyway {
+            http_routers: Vec::new(),
+            http_plugins: Vec::new(),
+            http_fallback: SgBoxLayer::new(FilterRequestLayer::new(ResponseAnyway {
                 status: hyper::StatusCode::NOT_FOUND,
                 message: "[Sg.HttpRouteRule] no rule matched".to_string().into(),
             })),
         }
     }
-    pub fn router(mut self, router: SgHttpRouter) -> Self {
-        self.routers.push(router);
+    pub fn http_router(mut self, route: SgHttpRoute) -> Self {
+        self.http_routers.push(route);
         self
     }
-    pub fn plugin(mut self, plugin: SgBoxLayer) -> Self {
-        self.plugins.push(plugin);
+    pub fn http_plugin(mut self, plugin: SgBoxLayer) -> Self {
+        self.http_plugins.push(plugin);
         self
     }
-    pub fn fallback(mut self, fallback: SgBoxLayer) -> Self {
-        self.fallback = fallback;
+    pub fn http_fallback(mut self, fallback: SgBoxLayer) -> Self {
+        self.http_fallback = fallback;
         self
     }
     pub fn build(self) -> SgGatewayLayer {
         SgGatewayLayer {
-            routers: self.routers.into(),
-            plugins: self.plugins.into(),
-            fallback: self.fallback,
+            http_routes: self.http_routers.into(),
+            http_plugins: self.http_plugins.into(),
+            http_fallback: self.http_fallback,
         }
     }
 }

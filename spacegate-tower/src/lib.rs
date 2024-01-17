@@ -2,10 +2,11 @@
 pub mod body;
 pub mod extension;
 pub mod helper_layers;
-pub mod plugin_layers;
 pub mod layers;
+pub mod plugin_layers;
 pub mod service;
 pub mod utils;
+pub mod listener;
 
 pub use body::SgBody;
 use extension::reflect::Reflect;
@@ -23,7 +24,7 @@ use hyper::{
     body::{Body, Bytes},
     Error, Request, Response, StatusCode,
 };
-use tardis::tokio;
+
 use tower::util::BoxCloneService;
 use tower_layer::{layer_fn, Layer};
 use tower_service::Service;
@@ -143,18 +144,21 @@ mod test {
 
     use http_body_util::BodyExt;
     use hyper::{Request, Response};
-    use tardis::tokio;
+
     use tower::{BoxError, ServiceExt};
     use tower_layer::Layer;
     use tower_service::Service;
 
     use crate::{
         helper_layers::filter::{response_anyway::ResponseAnyway, FilterRequestLayer},
-        plugin_layers::SgLayer,
-        layers::http_route::{
-            match_request::{MatchRequest, SgHttpPathMatch, SgHttpRouteMatch},
-            SgHttpBackendLayer, SgHttpRoute, SgHttpRouteRuleLayer,
+        layers::{
+            gateway::SgGatewayLayer,
+            http_route::{
+                match_request::{MatchRequest, SgHttpPathMatch, SgHttpRouteMatch},
+                SgHttpBackendLayer, SgHttpRoute, SgHttpRouteRuleLayer,
+            },
         },
+        plugin_layers::SgLayer,
         service::http_client_service::SgHttpClient,
         SgBody, SgResponseExt,
     };
@@ -179,21 +183,28 @@ mod test {
 
     #[tokio::test]
     async fn test() -> Result<(), BoxError> {
-        let request = Request::builder().uri("http://example.com/hello").body(SgBody::full("hello spacegate")).unwrap();
         let r#match = SgHttpRouteMatch {
-            path: Some(SgHttpPathMatch::Exact("/hello".to_string())),
+            path: Some(SgHttpPathMatch::Exact("/hello_1".to_string())),
             ..Default::default()
         };
-        dbg!(r#match.match_request(&request));
+
         let http_router = SgHttpRoute::builder()
             .hostnames(Some("example.com".to_string()))
             .rule(SgHttpRouteRuleLayer::builder().r#match(r#match).timeout(Duration::from_secs(5)).backend(SgHttpBackendLayer::builder().build()?).build()?)
-            
             .build()?;
-        let mut test_service = http_router.layer(EchoService);
-        let (parts, body) =
-            test_service.ready().await.unwrap().call(Request::builder().uri("http://example.com/hello").body(SgBody::full("hello spacegate")).unwrap()).await.unwrap().into_parts();
-        dbg!(parts, body.collect().await.unwrap().to_bytes());
+        let gateway = SgGatewayLayer::builder().http_router(http_router).build();
+        let mut test_service = gateway.layer(EchoService);
+        for idx in 0..5 {
+            let (parts, body) = test_service
+                .ready()
+                .await
+                .unwrap()
+                .call(Request::builder().uri(format!("http://example.com/hello_{idx}")).body(SgBody::full("hello spacegate")).unwrap())
+                .await
+                .unwrap()
+                .into_parts();
+            dbg!(parts, body.collect().await.unwrap().to_bytes());
+        }
         Ok(())
     }
 }

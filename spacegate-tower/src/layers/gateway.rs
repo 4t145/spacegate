@@ -41,7 +41,9 @@ pub struct SgGatewayLayer {
 }
 
 impl SgGatewayLayer {
-
+    pub fn builder() -> builder::SgGatewayLayerBuilder {
+        builder::SgGatewayLayerBuilder::new()
+    }
 }
 
 pub struct SgGatewayServices {
@@ -82,6 +84,16 @@ impl Router for SgGatewayRouter {
             }
         }
         None
+    }
+
+    fn all_indexes(&self) -> std::collections::VecDeque<Self::Index> {
+        let mut indexes = std::collections::VecDeque::new();
+        for (idx0, route) in self.routers.iter().enumerate() {
+            for (idx1, _) in route.rules.iter().enumerate() {
+                indexes.push_back((idx0, idx1));
+            }
+        }
+        indexes
     }
 }
 

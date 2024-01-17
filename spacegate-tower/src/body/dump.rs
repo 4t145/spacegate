@@ -9,7 +9,7 @@ use http_body_util::{
     BodyExt, Collected, Full,
 };
 use hyper::body::{Body, Bytes};
-use tardis::tokio::sync::{Mutex, RwLock};
+use tokio::sync::{Mutex, RwLock};
 
 use crate::utils::never;
 

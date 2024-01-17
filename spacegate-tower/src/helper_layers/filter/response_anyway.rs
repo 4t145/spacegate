@@ -1,4 +1,4 @@
-use hyper::{Request, Response};
+use hyper::{header::CONTENT_TYPE, Request, Response};
 
 use crate::SgBody;
 
@@ -12,6 +12,6 @@ pub struct ResponseAnyway {
 
 impl Filter for ResponseAnyway {
     fn filter(&self, _req: Request<SgBody>) -> Result<Request<SgBody>, Response<SgBody>> {
-        Err(Response::builder().status(self.status).body(SgBody::full(self.message.clone())).unwrap())
+        Err(Response::builder().status(self.status).header(CONTENT_TYPE, "text/html; charset=utf-8").body(SgBody::full(self.message.clone())).expect("invalid response builder"))
     }
 }

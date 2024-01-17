@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use tardis::regex::Regex;
+use regex::Regex;
 
 use crate::{utils::query_kv::QueryKvIter, Request, SgBody};
 

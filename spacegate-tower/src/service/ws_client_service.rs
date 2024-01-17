@@ -1,13 +1,11 @@
 use futures_util::{SinkExt, StreamExt};
 use hyper::upgrade::Upgraded;
 use hyper_util::rt::TokioIo;
-use tardis::{
-    log,
-    tokio::{
-        self,
-        io::{AsyncReadExt, AsyncWriteExt},
-    },
+use tokio::{
+    self,
+    io::{AsyncReadExt, AsyncWriteExt},
 };
+
 use tower::BoxError;
 
 use super::http_client_service::SgHttpClient;
@@ -21,12 +19,12 @@ pub async fn service(as_server: Upgraded, as_client: Upgraded) -> Result<(), Box
                 Ok(message) => match as_client_tx.send(message).await {
                     Ok(_) => {}
                     Err(error) => {
-                        log::warn!("[SG.Websocket] Client send message error: {error}");
+                        tracing::warn!("[SG.Websocket] Client send message error: {error}");
                         return;
                     }
                 },
                 Err(error) => {
-                    log::warn!("[SG.Websocket] Gateway receive message error: {error}");
+                    tracing::warn!("[SG.Websocket] Gateway receive message error: {error}");
                     return;
                 }
             }
@@ -38,12 +36,12 @@ pub async fn service(as_server: Upgraded, as_client: Upgraded) -> Result<(), Box
                 Ok(message) => match as_server_tx.send(message).await {
                     Ok(_) => {}
                     Err(error) => {
-                        log::warn!("[SG.Websocket] Gateway send message error: {error}");
+                        tracing::warn!("[SG.Websocket] Gateway send message error: {error}");
                         return;
                     }
                 },
                 Err(error) => {
-                    log::warn!("[SG.Websocket] Client receive message error: {error}");
+                    tracing::warn!("[SG.Websocket] Client receive message error: {error}");
                     return;
                 }
             }
