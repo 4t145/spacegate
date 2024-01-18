@@ -18,6 +18,7 @@ pub trait Router {
     fn all_indexes(&self) -> VecDeque<Self::Index>;
 }
 
+#[derive(Debug, Clone)]
 pub struct Route<S, R, F>
 where
     R: Router,

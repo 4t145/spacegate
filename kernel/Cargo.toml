@@ -24,6 +24,7 @@ k8s = ["kube", "k8s-openapi", "k8s-gateway-api", "schemars", "cache"]
 
 [dependencies]
 spacegate-tower = { path = "../spacegate-tower" }
+spacegate-plugin = { path = "../spacegate-plugin" }
 
 serde.workspace = true
 serde_json.workspace = true

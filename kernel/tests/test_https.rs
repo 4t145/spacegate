@@ -5,6 +5,7 @@ use spacegate_kernel::config::{
     gateway_dto::{SgGateway, SgListener, SgProtocol, SgTlsConfig, SgTlsMode},
     http_route_dto::{SgBackendRef, SgHttpRoute, SgHttpRouteRule},
 };
+use spacegate_tower::BoxError;
 use tardis::{
     basic::result::TardisResult,
     config::config_dto::WebClientModuleConfig,
@@ -97,7 +98,7 @@ W0X+/YToWPeWivw3Kbo05oCob0NUi3fXtiTHng==
 -----END CERTIFICATE-----"#;
 
 #[tokio::test]
-async fn test_https() -> TardisResult<()> {
+async fn test_https() -> Result<(), BoxError> {
     env::set_var("RUST_LOG", "info,spacegate_kernel=trace");
     tracing_subscriber::fmt::init();
     spacegate_kernel::do_startup(

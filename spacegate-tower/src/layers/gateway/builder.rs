@@ -33,8 +33,16 @@ impl SgGatewayLayerBuilder {
         self.http_routers.push(route);
         self
     }
+    pub fn http_routers(mut self, routes: impl IntoIterator<Item = SgHttpRoute>) -> Self {
+        self.http_routers.extend(routes);
+        self
+    }
     pub fn http_plugin(mut self, plugin: SgBoxLayer) -> Self {
         self.http_plugins.push(plugin);
+        self
+    }
+    pub fn http_plugins(mut self, plugins: impl IntoIterator<Item = SgBoxLayer>) -> Self {
+        self.http_plugins.extend(plugins);
         self
     }
     pub fn http_fallback(mut self, fallback: SgBoxLayer) -> Self {

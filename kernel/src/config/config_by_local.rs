@@ -7,7 +7,7 @@ use tardis::{
     TardisFuns,
 };
 
-use crate::{do_startup, functions::http_route, shutdown};
+use crate::{do_startup, shutdown};
 
 use super::{gateway_dto::SgGateway, http_route_dto::SgHttpRoute};
 use lazy_static::lazy_static;
@@ -35,7 +35,9 @@ pub async fn init(conf_path: &str, check_interval_sec: u64) -> TardisResult<Vec<
                     do_startup(gateway_config, http_route_configs).await.expect("[SG.Config] re-startup failed");
                 } else if routes_config_changed {
                     let (gateway_config, http_route_configs) = config.expect("[SG.Config] config is None");
-                    http_route::init(gateway_config, http_route_configs).await.expect("[SG.Config] route re-init failed");
+                    shutdown(&gateway_config.name).await.expect("[SG.Config] shutdown failed");
+                    do_startup(gateway_config, http_route_configs).await.expect("[SG.Config] re-startup failed");
+                    // http_route::init(gateway_config, http_route_configs).await.expect("[SG.Config] route re-init failed");
                 }
             }
             interval.tick().await;

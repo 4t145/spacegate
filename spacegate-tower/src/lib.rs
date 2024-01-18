@@ -3,12 +3,14 @@ pub mod body;
 pub mod extension;
 pub mod helper_layers;
 pub mod layers;
+pub mod listener;
 pub mod plugin_layers;
 pub mod service;
 pub mod utils;
-pub mod listener;
 
 pub use body::SgBody;
+pub use tower_layer::Layer;
+pub use tower_service::Service;
 use extension::reflect::Reflect;
 use std::{
     convert::Infallible,
@@ -26,8 +28,7 @@ use hyper::{
 };
 
 use tower::util::BoxCloneService;
-use tower_layer::{layer_fn, Layer};
-use tower_service::Service;
+use tower_layer::{layer_fn};
 use utils::{fold_sg_layers::fold_sg_layers, never};
 
 pub trait SgRequestExt {
@@ -134,6 +135,8 @@ impl fmt::Debug for SgBoxLayer {
     }
 }
 
+pub use tower::BoxError;
+
 #[cfg(test)]
 mod test {
     use std::{
@@ -183,14 +186,18 @@ mod test {
 
     #[tokio::test]
     async fn test() -> Result<(), BoxError> {
-        let r#match = SgHttpRouteMatch {
-            path: Some(SgHttpPathMatch::Exact("/hello_1".to_string())),
-            ..Default::default()
-        };
-
         let http_router = SgHttpRoute::builder()
             .hostnames(Some("example.com".to_string()))
-            .rule(SgHttpRouteRuleLayer::builder().r#match(r#match).timeout(Duration::from_secs(5)).backend(SgHttpBackendLayer::builder().build()?).build()?)
+            .rule(
+                SgHttpRouteRuleLayer::builder()
+                    .matches([SgHttpRouteMatch {
+                        path: Some(SgHttpPathMatch::Exact("/hello_1".to_string())),
+                        ..Default::default()
+                    }])
+                    .timeout(Duration::from_secs(5))
+                    .backend(SgHttpBackendLayer::builder().build()?)
+                    .build()?,
+            )
             .build()?;
         let gateway = SgGatewayLayer::builder().http_router(http_router).build();
         let mut test_service = gateway.layer(EchoService);

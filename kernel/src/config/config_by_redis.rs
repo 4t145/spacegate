@@ -8,7 +8,7 @@ use tardis::{
     tokio::{sync::Mutex, time},
 };
 
-use crate::{do_startup, functions::http_route, shutdown};
+use crate::{do_startup, shutdown};
 
 use super::{gateway_dto::SgGateway, http_route_dto::SgHttpRoute};
 use lazy_static::lazy_static;
@@ -78,7 +78,11 @@ pub async fn init(conf_url: &str, check_interval_sec: u64) -> TardisResult<Vec<(
                                 shutdown(changed_gateway_name).await.expect("[SG.Config] shutdown failed");
                                 do_startup(gateway_config, http_route_configs).await.expect("[SG.Config] re-startup failed");
                             }
-                            "httproute" => http_route::init(gateway_config, http_route_configs).await.expect("[SG.Config] http_route re-init failed"),
+                            "httproute" => {
+                                shutdown(changed_gateway_name).await.expect("[SG.Config] shutdown failed");
+                                do_startup(gateway_config, http_route_configs).await.expect("[SG.Config] re-startup failed");
+                                // http_route::init(gateway_config, http_route_configs).await.expect("[SG.Config] http_route re-init failed")
+                            }
                             _ => {}
                         }
                     } else {

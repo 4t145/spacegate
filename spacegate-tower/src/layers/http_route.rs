@@ -55,10 +55,10 @@ impl SgHttpRoute {
         SgHttpRouteLayerBuilder::new()
     }
 }
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct SgHttpRouter {
     pub hostnames: Arc<[String]>,
-    pub rules: Arc<[Arc<Option<SgHttpRouteMatch>>]>,
+    pub rules: Arc<[Arc<Option<Vec<SgHttpRouteMatch>>>]>,
 }
 
 /****************************************************************************************
@@ -69,7 +69,7 @@ pub struct SgHttpRouter {
 
 #[derive(Debug, Clone)]
 pub struct SgHttpRouteRuleLayer {
-    pub r#match: Arc<Option<SgHttpRouteMatch>>,
+    pub r#match: Arc<Option<Vec<SgHttpRouteMatch>>>,
     pub plugins: Arc<[SgBoxLayer]>,
     timeouts: Option<Duration>,
     backends: Arc<[SgHttpBackendLayer]>,
@@ -83,7 +83,7 @@ impl SgHttpRouteRuleLayer {
 
 impl<S> Layer<S> for SgHttpRouteRuleLayer
 where
-    S: Clone + Service<Request<SgBody>, Error = Infallible, Response = Response<SgBody>> + Send + Sync + 'static,
+    S: Clone + Service<Request<SgBody>, Error = Infallible, Response = Response<SgBody>> + Send + 'static,
     <S as tower_service::Service<Request<SgBody>>>::Future: std::marker::Send,
 {
     type Service = SgRouteRule;
@@ -104,7 +104,7 @@ where
 }
 #[derive(Clone)]
 pub struct SgRouteRule {
-    pub r#match: Arc<Option<SgHttpRouteMatch>>,
+    pub r#match: Arc<Option<Vec<SgHttpRouteMatch>>>,
     pub service: SgBoxService,
 }
 
@@ -145,7 +145,7 @@ impl SgHttpBackendLayer {
 
 impl<S> Layer<S> for SgHttpBackendLayer
 where
-    S: Clone + Service<Request<SgBody>, Error = Infallible, Response = Response<SgBody>> + Send + Sync + 'static,
+    S: Clone + Service<Request<SgBody>, Error = Infallible, Response = Response<SgBody>> + Send  + 'static,
     <S as tower_service::Service<Request<SgBody>>>::Future: std::marker::Send,
 {
     type Service = SgHttpBackend<SgBoxService>;

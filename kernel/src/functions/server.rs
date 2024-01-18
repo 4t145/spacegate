@@ -3,26 +3,31 @@ use std::{
     convert::Infallible,
     future::Future,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    sync::Mutex,
 };
 
-use crate::config::gateway_dto::{SgGateway, SgProtocol, SgTlsMode};
+use crate::config::{
+    gateway_dto::{SgGateway, SgProtocol, SgTlsMode},
+    http_route_dto::SgHttpRoute,
+    plugin_filter_dto::SgRouteFilter,
+};
 use core::task::{Context, Poll};
 use http::{HeaderValue, Request, Response, StatusCode};
 
-use super::http_route;
 use lazy_static::lazy_static;
 use serde_json::json;
 use spacegate_tower::{
+    layers::gateway::SgGatewayLayer,
     listener::SgListen,
     service::{get_http_backend_service, http_backend_service},
-    SgBoxService,
+    BoxError, Layer, Service, SgBoxService,
 };
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 use std::vec::Vec;
 use std::{io, sync};
-use tardis::tokio::time::timeout;
+use tardis::futures_util::{ready, FutureExt};
 use tardis::{
     basic::{error::TardisError, result::TardisResult},
     futures_util::future::join_all,
@@ -31,10 +36,7 @@ use tardis::{
     TardisFuns,
 };
 use tardis::{config::config_dto::LogConfig, consts::IP_UNSPECIFIED};
-use tardis::{
-    futures_util::{ready, FutureExt},
-    tokio::sync::Mutex,
-};
+use tardis::{tardis_static, tokio::time::timeout};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio_rustls::rustls::{self, pki_types::PrivateKeyDer, ServerConfig};
 use tokio_util::sync::{CancellationToken, WaitForCancellationFutureOwned};
@@ -44,6 +46,54 @@ lazy_static! {
     static ref START_JOIN_HANDLE: Arc<Mutex<HashMap<String, JoinHandle<()>>>> = <_>::default();
 }
 
+fn create_service(plugins: Vec<SgRouteFilter>, http_routes: Vec<crate::SgHttpRoute>) -> Result<SgBoxService, BoxError> {
+    let routes = http_routes
+        .into_iter()
+        .map(|route| {
+            let plugins = route.filters.unwrap_or_default();
+            let plugins = plugins.into_iter().map(SgRouteFilter::into_layer).collect::<Result<Vec<_>, _>>()?;
+            let rules = route.rules.unwrap_or_default();
+            let rules = rules
+                .into_iter()
+                .map(|route_rule| {
+                    let mut builder = spacegate_tower::layers::http_route::SgHttpRouteRuleLayer::builder();
+                    builder = if let Some(matches) = route_rule.matches {
+                        builder.matches(matches)
+                    } else {
+                        builder.match_all()
+                    };
+                    if let Some(backends) = route_rule.backends {
+                        let backends = backends
+                            .into_iter()
+                            .map(|backend| {
+                                let host = backend.get_host();
+                                let mut builder = spacegate_tower::layers::http_route::SgHttpBackendLayer::builder();
+                                let plugins = backend.filters.unwrap_or_default();
+                                let plugins = plugins.into_iter().map(SgRouteFilter::into_layer).collect::<Result<Vec<_>, _>>()?;
+                                builder = builder.host(host).port(backend.port).plugins(plugins);
+                                builder.build()
+                            })
+                            .collect::<Result<Vec<_>, _>>()?;
+                        builder = builder.backends(backends);
+                    };
+                    if let Some(timeout) = route_rule.timeout_ms {
+                        builder = builder.timeout(Duration::from_millis(timeout));
+                    }
+                    let plugins = route_rule.filters.unwrap_or_default();
+                    builder = builder.plugins(plugins.into_iter().map(SgRouteFilter::into_layer).collect::<Result<Vec<_>, _>>()?);
+                    builder.build()
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            spacegate_tower::layers::http_route::SgHttpRoute::builder().hostnames(route.hostnames.unwrap_or_default()).plugins(plugins).rules(rules).build()
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let plugins = plugins.into_iter().map(SgRouteFilter::into_layer).collect::<Result<Vec<_>, _>>()?;
+    let gateway_layer = spacegate_tower::layers::gateway::SgGatewayLayer::builder().http_routers(routes).http_plugins(plugins).build();
+    let backend_service = get_http_backend_service();
+    let service = SgBoxService::new(gateway_layer.layer(backend_service));
+    Ok(service)
+}
+
 pub struct RunningSgGateway {
     token: CancellationToken,
     handle: JoinHandle<()>,
@@ -51,13 +101,27 @@ pub struct RunningSgGateway {
 }
 
 impl RunningSgGateway {
-    pub fn start(config: &SgGateway) -> TardisResult<Self> {
-        let client = get_http_backend_service();
+    tardis_static! {
+        pub global_store: Arc<Mutex<HashMap<String, RunningSgGateway>>>;
+    }
+
+    pub fn global_save(gateway_name: impl Into<String>, gateway: RunningSgGateway) {
+        let mut global_store = Self::global_store().lock().expect("poisoned lock");
+        global_store.insert(gateway_name.into(), gateway);
+    }
+
+    pub fn global_remove(gateway_name: impl AsRef<str>) -> Option<RunningSgGateway> {
+        let mut global_store = Self::global_store().lock().expect("poisoned lock");
+        global_store.remove(gateway_name.as_ref())
+    }
+
+    pub fn start(config: SgGateway, http_routes: Vec<SgHttpRoute>) -> Result<Self, BoxError> {
+        let service = create_service(config.filters.unwrap_or_default(), http_routes)?;
         if config.listeners.is_empty() {
-            return Err(TardisError::bad_request("[SG.Server] Missing Listeners", ""));
+            return Err("[SG.Server] Missing Listeners".into());
         }
         if config.listeners.iter().any(|l| l.protocol != SgProtocol::Http && l.protocol != SgProtocol::Https && l.protocol != SgProtocol::Ws) {
-            return Err(TardisError::bad_request("[SG.Server] Non-Http(s) protocols are not supported yet", ""));
+            return Err("[SG.Server] Non-Http(s) protocols are not supported yet".into());
         }
         if let Some(log_level) = config.parameters.log_level.clone() {
             log::debug!("[SG.Server] change log level to {log_level}");
@@ -78,7 +142,7 @@ impl RunningSgGateway {
         let cancel_token = CancellationToken::new();
 
         let gateway_name = Arc::new(config.name.to_string());
-        let mut listens: Vec<SgListen<SgBoxService>> = Vec::new();
+        let listens: Vec<SgListen<SgBoxService>> = Vec::new();
         for listener in &config.listeners {
             let ip = listener.ip.unwrap_or(IP_UNSPECIFIED);
             let addr = SocketAddr::new(ip, listener.port);
@@ -91,7 +155,8 @@ impl RunningSgGateway {
                 if SgTlsMode::Terminate == tls.mode {
                     {
                         let certs = rustls_pemfile::certs(&mut tls.cert.as_bytes()).filter_map(Result::ok).collect::<Vec<_>>();
-                        let keys = rustls_pemfile::read_all(&mut tls.key.as_bytes()).filter_map(Result::ok);
+                        let mut tls_key = tls.key.as_bytes();
+                        let mut keys = rustls_pemfile::read_all(&mut tls_key).filter_map(Result::ok);
 
                         let key = keys
                             .find_map(|key| match key {
@@ -108,15 +173,15 @@ impl RunningSgGateway {
                     };
                 }
             }
-            let listen_id = format!("{name}/{protocol}", name = listener.name, protocol = protocol);
-            let mut listen = SgListen::new(addr, client, cancel_token.cancelled_owned(), listen_id);
+            let listen_id = format!("{gateway_name}-{name}-{protocol}", name = listener.name.as_deref().unwrap_or("?"), protocol = protocol);
+            let listen = SgListen::new(addr, service.clone(), cancel_token.clone(), listen_id);
             if let Some(tls_cfg) = tls_cfg {
-                listen.with_tls_config(tls_cfg)
+                listen.with_tls_config(tls_cfg);
             }
         }
 
         let task = tokio::spawn(async move {
-            let join_set = tokio::task::JoinSet::new();
+            let mut join_set = tokio::task::JoinSet::new();
             for listen in listens {
                 join_set.spawn(async move {
                     let id = listen.listener_id.clone();
@@ -124,13 +189,18 @@ impl RunningSgGateway {
                         log::error!("[Sg.Server] listen error: {e}")
                     }
                     log::info!("[Sg.Server] listener[{id}] quit listening")
-                })
+                });
             }
-            while let Some(next) = join_set.join_next().await {}
+            while (join_set.join_next().await).is_some() {}
         });
-        Ok((cancel_token, task))
+        Ok(RunningSgGateway {
+            token: cancel_token,
+            handle: task,
+            shutdown_timeout: Duration::from_secs(10),
+        })
     }
-    pub async fn shutdown(self) -> TardisResult<()>{
+
+    pub async fn shutdown(self) {
         self.token.cancel();
         match timeout(self.shutdown_timeout, self.handle).await {
             Ok(Ok(_)) => {}
@@ -139,10 +209,8 @@ impl RunningSgGateway {
             }
             Err(e) => {
                 log::warn!("[SG.Server] Wait shutdown timeout:{e}");
-                Ok(())
             }
-        }?;
+        };
         log::info!("[SG.Server] Gateway shutdown");
-        Ok(())
     }
 }

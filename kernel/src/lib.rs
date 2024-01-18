@@ -21,35 +21,35 @@
 
 #![warn(clippy::unwrap_used)]
 use config::{gateway_dto::SgGateway, http_route_dto::SgHttpRoute};
-use functions::{http_route, server};
+use functions::server;
 pub use http;
 pub use hyper;
+use spacegate_tower::BoxError;
 use tardis::{basic::result::TardisResult, log, tokio::signal};
 
 pub mod config;
 pub mod constants;
 pub mod functions;
 pub mod helpers;
-pub mod instance;
-pub mod service;
+// pub mod instance;
 // pub mod plugins;
 
 #[inline]
-pub async fn startup_k8s(namespace: Option<String>) -> TardisResult<()> {
+pub async fn startup_k8s(namespace: Option<String>) -> Result<(), BoxError> {
     startup(true, namespace, None).await
 }
 
 #[inline]
-pub async fn startup_native(conf_uri: String, check_interval_sec: u64) -> TardisResult<()> {
+pub async fn startup_native(conf_uri: String, check_interval_sec: u64) -> Result<(), BoxError> {
     startup(false, Some(conf_uri), Some(check_interval_sec)).await
 }
 
 #[inline]
-pub async fn startup_simplify(conf_path: String, check_interval_sec: u64) -> TardisResult<()> {
+pub async fn startup_simplify(conf_path: String, check_interval_sec: u64) -> Result<(), BoxError> {
     startup(false, Some(conf_path), Some(check_interval_sec)).await
 }
 
-pub async fn startup(k8s_mode: bool, namespace_or_conf_uri: Option<String>, check_interval_sec: Option<u64>) -> TardisResult<()> {
+pub async fn startup(k8s_mode: bool, namespace_or_conf_uri: Option<String>, check_interval_sec: Option<u64>) -> Result<(), BoxError> {
     // Initialize configuration according to different modes
     let configs = config::init(k8s_mode, namespace_or_conf_uri, check_interval_sec).await?;
     for (gateway, http_routes) in configs {
@@ -58,30 +58,35 @@ pub async fn startup(k8s_mode: bool, namespace_or_conf_uri: Option<String>, chec
     Ok(())
 }
 
-pub async fn do_startup(gateway: SgGateway, http_routes: Vec<SgHttpRoute>) -> TardisResult<()> {
+pub async fn do_startup(gateway: SgGateway, http_routes: Vec<SgHttpRoute>) -> Result<(), BoxError> {
+    let gateway_name = gateway.name.clone();
     #[cfg(feature = "cache")]
     {
-        let gateway_name = &gateway.name.clone();
         // Initialize cache instances
         if let Some(url) = &gateway.parameters.redis_url {
             log::trace!("Initialize cache client...url:{url}");
-            functions::cache_client::init(gateway_name, url).await?;
+            functions::cache_client::init(gateway_name.clone(), url).await?;
         }
     }
     // Initialize service instances
-    let running_gateway = server::RunningSgGateway::start(&gateway)?;
+    let running_gateway = server::RunningSgGateway::start(gateway, http_routes)?;
+    server::RunningSgGateway::global_save(gateway_name, running_gateway);
+    Ok(())
 }
 
-pub async fn shutdown(gateway_name: &str) -> TardisResult<()> {
+pub async fn shutdown(gateway_name: &str) -> Result<(), BoxError> {
     // Remove route instances
-    http_route::remove(gateway_name).await?;
+    // http_route::remove(gateway_name).await?;
     #[cfg(feature = "cache")]
     {
         // Remove cache instances
         functions::cache_client::remove(gateway_name).await?;
     }
     // Shutdown service instances
-    server::shutdown(gateway_name).await
+    if let Some(gateway) = server::RunningSgGateway::global_remove(gateway_name) {
+        gateway.shutdown().await;
+    }
+    Ok(())
 }
 
 pub async fn wait_graceful_shutdown() -> TardisResult<()> {

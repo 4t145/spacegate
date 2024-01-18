@@ -4,7 +4,7 @@ use crate::config::gateway_dto::SgProtocol;
 use http::header::{CONNECTION, SEC_WEBSOCKET_ACCEPT, SEC_WEBSOCKET_KEY, SEC_WEBSOCKET_VERSION, UPGRADE};
 use hyper::header::HeaderValue;
 use hyper::{self};
-use hyper::{Body, Request, Response, StatusCode};
+use hyper::{Request, Response, StatusCode};
 use std::sync::Arc;
 use tardis::basic::{error::TardisError, result::TardisResult};
 use tardis::crypto::crypto_digest::algorithm;
@@ -14,7 +14,7 @@ use tardis::web::tokio_tungstenite::tungstenite::{protocol, Message};
 use tardis::web::tokio_tungstenite::{connect_async, WebSocketStream};
 use tardis::{log, tokio, TardisFuns};
 
-use crate::instance::SgBackendInst;
+// use crate::instance::SgBackendInst;
 
 pub async fn process(gateway_name: Arc<String>, remote_addr: SocketAddr, backend: &SgBackendInst, mut request: Request<Body>) -> TardisResult<Response<Body>> {
     let have_upgrade = request

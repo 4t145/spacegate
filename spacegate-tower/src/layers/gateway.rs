@@ -46,10 +46,12 @@ impl SgGatewayLayer {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct SgGatewayServices {
     services: Vec<Vec<SgBoxService>>,
 }
 
+#[derive(Debug, Clone)]
 pub struct SgGatewayRouter {
     routers: Arc<[SgHttpRouter]>,
 }
@@ -99,7 +101,7 @@ impl Router for SgGatewayRouter {
 
 impl<S> Layer<S> for SgGatewayLayer
 where
-    S: Clone + Service<Request<SgBody>, Error = Infallible, Response = Response<SgBody>> + Send + Sync + 'static,
+    S: Clone + Service<Request<SgBody>, Error = Infallible, Response = Response<SgBody>> + Send + 'static,
     <S as tower_service::Service<Request<SgBody>>>::Future: std::marker::Send,
 {
     type Service = Route<SgGatewayServices, SgGatewayRouter, SgBoxService>;

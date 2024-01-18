@@ -35,8 +35,16 @@ impl SgHttpRouteLayerBuilder {
         self.rules.push(rule);
         self
     }
+    pub fn rules(mut self, rules: impl IntoIterator<Item = SgHttpRouteRuleLayer>) -> Self {
+        self.rules.extend(rules);
+        self
+    }
     pub fn plugin(mut self, plugin: SgBoxLayer) -> Self {
         self.plugins.push(plugin);
+        self
+    }
+    pub fn plugins(mut self, plugins: impl IntoIterator<Item = SgBoxLayer>) -> Self {
+        self.plugins.extend(plugins);
         self
     }
     pub fn build(self) -> Result<SgHttpRoute, BoxError> {
@@ -50,8 +58,8 @@ impl SgHttpRouteLayerBuilder {
 
 #[derive(Debug)]
 pub struct SgHttpRouteRuleLayerBuilder {
-    r#match: Option<SgHttpRouteMatch>,
-    plugins: Result<Vec<SgBoxLayer>, BoxError>,
+    r#match: Option<Vec<SgHttpRouteMatch>>,
+    plugins: Vec<SgBoxLayer>,
     timeouts: Option<Duration>,
     backends: Vec<SgHttpBackendLayer>,
 }
@@ -65,31 +73,25 @@ impl SgHttpRouteRuleLayerBuilder {
     pub fn new() -> Self {
         Self {
             r#match: None,
-            plugins: Ok(Vec::new()),
+            plugins: Vec::new(),
             timeouts: None,
             backends: Vec::new(),
         }
     }
-    pub fn r#match(mut self, r#match: SgHttpRouteMatch) -> Self {
-        self.r#match = Some(r#match);
+    pub fn matches(mut self, matches: impl IntoIterator<Item = SgHttpRouteMatch>) -> Self {
+        self.r#match = Some(matches.into_iter().collect());
         self
     }
     pub fn match_all(mut self) -> Self {
         self.r#match = None;
         self
     }
-    pub fn plugin(mut self, plugin: impl MakeSgLayer) -> Self {
-        if let Ok(plugins) = self.plugins.as_mut() {
-            let new_plugin = plugin.make_layer();
-            match new_plugin {
-                Ok(new_plugin) => {
-                    plugins.push(new_plugin);
-                }
-                Err(e) => {
-                    self.plugins = Err(e.into());
-                }
-            }
-        }
+    pub fn plugin(mut self, plugin: SgBoxLayer) -> Self {
+        self.plugins.push(plugin);
+        self
+    }
+    pub fn plugins(mut self, plugins: impl IntoIterator<Item = SgBoxLayer>) -> Self {
+        self.plugins.extend(plugins);
         self
     }
     pub fn timeout(mut self, timeout: Duration) -> Self {
@@ -100,10 +102,14 @@ impl SgHttpRouteRuleLayerBuilder {
         self.backends.push(backend);
         self
     }
+    pub fn backends(mut self, backend: impl IntoIterator<Item = SgHttpBackendLayer>) -> Self {
+        self.backends.extend(backend);
+        self
+    }
     pub fn build(self) -> Result<SgHttpRouteRuleLayer, BoxError> {
         Ok(SgHttpRouteRuleLayer {
             r#match: self.r#match.into(),
-            plugins: Arc::from(self.plugins?),
+            plugins: Arc::from(self.plugins),
             timeouts: self.timeouts,
             backends: Arc::from_iter(self.backends),
         })
@@ -115,7 +121,7 @@ pub struct SgHttpBackendLayerBuilder {
     host: Option<String>,
     port: Option<u16>,
     protocol: Option<String>,
-    plugins: Result<Vec<SgBoxLayer>, BoxError>,
+    plugins: Vec<SgBoxLayer>,
     timeout: Option<Duration>,
     weight: u16,
 }
@@ -126,7 +132,7 @@ impl Default for SgHttpBackendLayerBuilder {
             host: None,
             port: None,
             protocol: None,
-            plugins: Ok(Vec::new()),
+            plugins: Vec::new(),
             timeout: None,
             weight: 1,
         }
@@ -137,18 +143,12 @@ impl SgHttpBackendLayerBuilder {
     pub fn new() -> Self {
         Self::default()
     }
-    pub fn plugin(mut self, filter: impl MakeSgLayer) -> Self {
-        if let Ok(plugins) = self.plugins.as_mut() {
-            let new_plugin = filter.make_layer();
-            match new_plugin {
-                Ok(new_filter) => {
-                    plugins.push(new_filter);
-                }
-                Err(e) => {
-                    self.plugins = Err(e.into());
-                }
-            }
-        }
+    pub fn plugin(mut self, plugin: SgBoxLayer) -> Self {
+        self.plugins.push(plugin);
+        self
+    }
+    pub fn plugins(mut self, plugins: impl IntoIterator<Item = SgBoxLayer>) -> Self {
+        self.plugins.extend(plugins);
         self
     }
     pub fn timeout(mut self, timeout: Duration) -> Self {
@@ -176,7 +176,7 @@ impl SgHttpBackendLayerBuilder {
             host: self.host.map(Into::into),
             port: self.port,
             scheme: None,
-            filters: Arc::from(self.plugins?),
+            filters: Arc::from(self.plugins),
             timeout: self.timeout,
             weight: self.weight,
         })

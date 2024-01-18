@@ -1,8 +1,13 @@
-
+use hyper::{Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
+use spacegate_tower::plugin_layers::MakeSgLayer;
+use spacegate_tower::{SgBody, SgBoxLayer};
+use spacegate_tower::helper_layers::filter::{Filter, FilterRequestLayer, FilterRequest};
 use tardis::basic::{error::TardisError, result::TardisResult};
 use tardis::url::Url;
 
+use crate::def_plugin;
+use crate::model::SgHttpPathModifier;
 
 // def_filter!("rewrite", SgFilterRewriteDef, SgFilterRewrite);
 
@@ -17,43 +22,77 @@ pub struct SgFilterRewrite {
     pub path: Option<SgHttpPathModifier>,
 }
 
-#[async_trait]
-impl SgPluginFilter for SgFilterRewrite {
-    fn accept(&self) -> super::SgPluginFilterAccept {
-        super::SgPluginFilterAccept {
-            kind: vec![super::SgPluginFilterKind::Http, super::SgPluginFilterKind::Ws],
-            ..Default::default()
-        }
-    }
+// #[async_trait]
+// impl SgPluginFilter for SgFilterRewrite {
+//     fn accept(&self) -> super::SgPluginFilterAccept {
+//         super::SgPluginFilterAccept {
+//             kind: vec![super::SgPluginFilterKind::Http, super::SgPluginFilterKind::Ws],
+//             ..Default::default()
+//         }
+//     }
 
-    async fn init(&mut self, _: &SgPluginFilterInitDto) -> TardisResult<()> {
-        Ok(())
-    }
+//     async fn init(&mut self, _: &SgPluginFilterInitDto) -> TardisResult<()> {
+//         Ok(())
+//     }
 
-    async fn destroy(&self) -> TardisResult<()> {
-        Ok(())
-    }
+//     async fn destroy(&self) -> TardisResult<()> {
+//         Ok(())
+//     }
 
-    async fn req_filter(&self, _: &str, mut ctx: SgRoutePluginContext) -> TardisResult<(bool, SgRoutePluginContext)> {
+//     async fn req_filter(&self, _: &str, mut ctx: SgRoutePluginContext) -> TardisResult<(bool, SgRoutePluginContext)> {
+//         if let Some(hostname) = &self.hostname {
+//             let mut uri = Url::parse(&ctx.request.get_uri().to_string())?;
+//             uri.set_host(Some(hostname)).map_err(|_| TardisError::format_error(&format!("[SG.Filter.Rewrite] Host {hostname} parsing error"), ""))?;
+//             ctx.request.set_uri(uri.to_uri()?);
+//         }
+//         let matched_match_inst = ctx.get_rule_matched();
+//         if let Some(new_url) = http_common_modify_path(ctx.request.get_uri(), &self.path, matched_match_inst.as_ref())? {
+//             ctx.request.set_uri(new_url);
+//         }
+//         Ok((true, ctx))
+//     }
+
+//     async fn resp_filter(&self, _: &str, ctx: SgRoutePluginContext) -> TardisResult<(bool, SgRoutePluginContext)> {
+//         Ok((true, ctx))
+//     }
+// }
+
+impl SgFilterRewrite {
+    fn on_req(&self, req: Request<SgBody>) -> Result<Request<SgBody>, Response<SgBody>> {
         if let Some(hostname) = &self.hostname {
-            let mut uri = Url::parse(&ctx.request.get_uri().to_string())?;
-            uri.set_host(Some(hostname)).map_err(|_| TardisError::format_error(&format!("[SG.Filter.Rewrite] Host {hostname} parsing error"), ""))?;
-            ctx.request.set_uri(uri.to_uri()?);
+            todo!()
+            // &req.uri().host()
+            // let mut uri = Url::parse(&req.get_uri().to_string()).map_err(|e| Response::with_code_message(StatusCode::BAD_REQUEST, format!("[SG.Filter.Rewrite] Invalid url")))?;
+            // uri.set_host(Some(hostname))
+            //     .map_err(|e| Response::with_code_message(StatusCode::INTERNAL_SERVER_ERROR, format!("[SG.Filter.Rewrite] Host {hostname} parsing error: {e}")))?;
+            // req.set_uri(uri.to_uri()?);
         }
-        let matched_match_inst = ctx.get_rule_matched();
-        if let Some(new_url) = http_common_modify_path(ctx.request.get_uri(), &self.path, matched_match_inst.as_ref())? {
-            ctx.request.set_uri(new_url);
-        }
-        Ok((true, ctx))
-    }
-
-    async fn resp_filter(&self, _: &str, ctx: SgRoutePluginContext) -> TardisResult<(bool, SgRoutePluginContext)> {
-        Ok((true, ctx))
+        //         let matched_match_inst = ctx.get_rule_matched();
+        //         if let Some(new_url) = http_common_modify_path(ctx.request.get_uri(), &self.path, matched_match_inst.as_ref())? {
+        //             ctx.request.set_uri(new_url);
+        //         }
+        //         Ok((true, ctx))
+        Ok(req)
     }
 }
 
+impl Filter for SgFilterRewrite {
+    fn filter(&self, req: Request<SgBody>) -> Result<Request<SgBody>, Response<SgBody>> {
+        self.on_req(req)
+    }
+}
 
+pub type RedirectFilterLayer = FilterRequestLayer<SgFilterRewrite>;
+pub type Redirect<S> = FilterRequest<SgFilterRewrite, S>;
 
+impl MakeSgLayer for SgFilterRewrite {
+    fn make_layer(&self) -> Result<SgBoxLayer, tower::BoxError> {
+        let layer = FilterRequestLayer::new(self.clone());
+        Ok(SgBoxLayer::new(layer))
+    }
+}
+
+def_plugin!("rewrite", RewritePlugin, SgFilterRewrite);
 
 // #[cfg(test)]
 

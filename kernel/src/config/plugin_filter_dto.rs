@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use spacegate_tower::{plugin_layers::MakeSgLayer, BoxError, SgBoxLayer};
+use tardis::basic::result::TardisResult;
 
 /// RouteFilter defines processing steps that must be completed during the request or response lifecycle.
 ///
@@ -16,6 +18,13 @@ pub struct SgRouteFilter {
     pub name: Option<String>,
     /// filter parameters.
     pub spec: Value,
+}
+
+impl SgRouteFilter {
+    pub fn into_layer(self) -> Result<SgBoxLayer, BoxError> {
+        let plugin_repo = spacegate_plugin::SgPluginRepository::global();
+        plugin_repo.create(&self.code, self.spec)?.make_layer()
+    }
 }
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]

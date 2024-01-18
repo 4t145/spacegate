@@ -17,6 +17,7 @@ name = "spacegate_tower"
 path = "src/lib.rs"
 
 [dependencies]
+regex = { workspace = true }
 hyper = { version = "1" }
 http-body-util = { version = "0" }
 tower-service = { version = "0.3.2" }
@@ -39,7 +40,7 @@ tokio-util = { version = "0.7.8", features = ["io"] }
 tracing = { version = "0" }
 hyper-util = { version = "*", features = ["full"] }
 tokio = { version = "1", features = ["net", "time"]}
-regex = { version = "1" }
+
 rand = { version = "0" }
 # future
 futures-util = { version = "*" }
