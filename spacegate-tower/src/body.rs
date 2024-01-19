@@ -65,6 +65,9 @@ impl SgBody {
             dump: Some(bytes.clone()),
         })
     }
+    pub fn get_dumped(&self) -> Option<&Bytes> {
+        self.dump.as_ref()
+    }
 }
 
 impl Clone for SgBody {

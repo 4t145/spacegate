@@ -9,14 +9,14 @@ pub mod service;
 pub mod utils;
 
 pub use body::SgBody;
-pub use tower_layer::Layer;
-pub use tower_service::Service;
 use extension::reflect::Reflect;
 use std::{
     convert::Infallible,
     fmt::{self, Display},
     sync::Arc,
 };
+pub use tower_layer::Layer;
+pub use tower_service::Service;
 
 use body::dump::Dump;
 use helper_layers::response_error::ErrorFormatter;
@@ -28,7 +28,7 @@ use hyper::{
 };
 
 use tower::util::BoxCloneService;
-use tower_layer::{layer_fn};
+use tower_layer::layer_fn;
 use utils::{fold_sg_layers::fold_sg_layers, never};
 
 pub trait SgRequestExt {
@@ -54,12 +54,16 @@ pub trait SgResponseExt {
     where
         Self: Sized,
     {
-        Self::with_code_message(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+        let message = e.to_string();
+        tracing::debug!(message, "[Sg] internal error");
+        Self::with_code_message(StatusCode::INTERNAL_SERVER_ERROR, message)
     }
     fn from_error<E: std::error::Error, F: ErrorFormatter>(e: E, formatter: &F) -> Self
     where
         Self: Sized,
     {
+        let message = formatter.format(&e);
+        tracing::debug!(message, "[Sg] internal error");
         Self::with_code_message(StatusCode::INTERNAL_SERVER_ERROR, formatter.format(&e))
     }
 }

@@ -25,6 +25,7 @@ use tower_http::timeout::{Timeout, TimeoutLayer};
 
 use tower_layer::Layer;
 use tower_service::Service;
+use tracing::instrument;
 
 use super::http_route::{match_request::MatchRequest, SgHttpRoute, SgHttpRouter};
 
@@ -72,19 +73,20 @@ impl IndexMut<(usize, usize)> for SgGatewayServices {
 
 impl Router for SgGatewayRouter {
     type Index = (usize, usize);
-
+    #[instrument(skip_all, fields(uri = req.uri().to_string(), method = req.method().as_str() ))]
     fn route(&self, req: &Request<SgBody>) -> Option<Self::Index> {
         for (idx0, route) in self.routers.iter().enumerate() {
-            if let Some(host) = req.uri().host() {
-                if route.hostnames.iter().any(|hostname| hostname == host) {
-                    for (idx1, r#match) in route.rules.iter().enumerate() {
-                        if r#match.match_request(req) {
-                            return Some((idx0, idx1));
-                        }
+            let host = req.uri().host();
+            if route.hostnames.is_empty() || host.is_some_and(|host| route.hostnames.iter().any(|hostname| hostname == host)) {
+                for (idx1, r#match) in route.rules.iter().enumerate() {
+                    if r#match.match_request(req) {
+                        tracing::trace!("matches {match:?}");
+                        return Some((idx0, idx1));
                     }
                 }
             }
         }
+        tracing::trace!("not matched");
         None
     }
 

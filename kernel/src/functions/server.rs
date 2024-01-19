@@ -27,15 +27,19 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::vec::Vec;
 use std::{io, sync};
-use tardis::futures_util::{ready, FutureExt};
 use tardis::{
     basic::{error::TardisError, result::TardisResult},
     futures_util::future::join_all,
-    log::{self},
+    log::{self as tracing, debug, info},
+    log::{self, error},
     tokio::{self, sync::watch::Sender, task::JoinHandle},
     TardisFuns,
 };
 use tardis::{config::config_dto::LogConfig, consts::IP_UNSPECIFIED};
+use tardis::{
+    futures_util::{ready, FutureExt},
+    log::{instrument, warn},
+};
 use tardis::{tardis_static, tokio::time::timeout};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio_rustls::rustls::{self, pki_types::PrivateKeyDer, ServerConfig};
@@ -71,7 +75,11 @@ fn create_service(plugins: Vec<SgRouteFilter>, http_routes: Vec<crate::SgHttpRou
                                 let plugins = backend.filters.unwrap_or_default();
                                 let plugins = plugins.into_iter().map(SgRouteFilter::into_layer).collect::<Result<Vec<_>, _>>()?;
                                 builder = builder.host(host).port(backend.port).plugins(plugins);
-                                builder.build()
+                                let protocol = backend.protocol;
+                                if let Some(protocol) = protocol {
+                                    builder = builder.protocol(protocol.to_string());
+                                }
+                                dbg!(builder.build())
                             })
                             .collect::<Result<Vec<_>, _>>()?;
                         builder = builder.backends(backends);
@@ -115,6 +123,7 @@ impl RunningSgGateway {
         global_store.remove(gateway_name.as_ref())
     }
 
+    #[instrument(fields(gateway=%config.name), skip_all, err)]
     pub fn start(config: SgGateway, http_routes: Vec<SgHttpRoute>) -> Result<Self, BoxError> {
         let service = create_service(config.filters.unwrap_or_default(), http_routes)?;
         if config.listeners.is_empty() {
@@ -142,7 +151,7 @@ impl RunningSgGateway {
         let cancel_token = CancellationToken::new();
 
         let gateway_name = Arc::new(config.name.to_string());
-        let listens: Vec<SgListen<SgBoxService>> = Vec::new();
+        let mut listens: Vec<SgListen<SgBoxService>> = Vec::new();
         for listener in &config.listeners {
             let ip = listener.ip.unwrap_or(IP_UNSPECIFIED);
             let addr = SocketAddr::new(ip, listener.port);
@@ -158,26 +167,35 @@ impl RunningSgGateway {
                         let mut tls_key = tls.key.as_bytes();
                         let mut keys = rustls_pemfile::read_all(&mut tls_key).filter_map(Result::ok);
 
-                        let key = keys
-                            .find_map(|key| match key {
+                        let key = keys.find_map(|key| {
+                            debug!("key item: {:?}", key);
+                            match key {
                                 rustls_pemfile::Item::Pkcs1Key(k) => Some(PrivateKeyDer::Pkcs1(k)),
                                 rustls_pemfile::Item::Pkcs8Key(k) => Some(PrivateKeyDer::Pkcs8(k)),
                                 rustls_pemfile::Item::Sec1Key(k) => Some(PrivateKeyDer::Sec1(k)),
-                                _ => None,
-                            })
-                            .ok_or(TardisError::internal_error("[SG.Server] Can not found a valid Tls private key", ""))?;
-
-                        let mut tls_server_cfg = rustls::ServerConfig::builder().with_no_client_auth().with_single_cert(certs, key)?;
-                        tls_server_cfg.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec(), b"http/1.0".to_vec()];
-                        tls_cfg.replace(tls_server_cfg)
+                                rest => {
+                                    warn!("Unsupported key type: {:?}", rest);
+                                    None
+                                }
+                            }
+                        });
+                        if let Some(key) = key {
+                            info!("[SG.Server] using cert key {key:?}");
+                            let mut tls_server_cfg = rustls::ServerConfig::builder().with_no_client_auth().with_single_cert(certs, key)?;
+                            tls_server_cfg.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec(), b"http/1.0".to_vec()];
+                            tls_cfg.replace(tls_server_cfg);
+                        } else {
+                            error!("[SG.Server] Can not found a valid Tls private key");
+                        }
                     };
                 }
             }
             let listen_id = format!("{gateway_name}-{name}-{protocol}", name = listener.name.as_deref().unwrap_or("?"), protocol = protocol);
-            let listen = SgListen::new(addr, service.clone(), cancel_token.clone(), listen_id);
+            let mut listen = SgListen::new(addr, service.clone(), cancel_token.clone(), listen_id);
             if let Some(tls_cfg) = tls_cfg {
-                listen.with_tls_config(tls_cfg);
+                listen = listen.with_tls_config(tls_cfg);
             }
+            listens.push(listen)
         }
 
         let task = tokio::spawn(async move {

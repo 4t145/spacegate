@@ -1,9 +1,8 @@
-use futures_util::{io, Future};
+use futures_util::{future::BoxFuture,  Future};
 use hyper::{body::Incoming, rt::Executor, Request, Response};
 use hyper_util::rt::{self, TokioExecutor, TokioIo};
 use rustls::pki_types::PrivateKeyDer;
 use serde::{Deserialize, Serialize};
-use tokio_util::sync::CancellationToken;
 use std::{
     convert::Infallible,
     fmt::Display,
@@ -13,7 +12,8 @@ use std::{
 };
 use tokio::net::TcpStream;
 use tokio_rustls::rustls;
-use tower::BoxError;
+use tokio_util::sync::CancellationToken;
+use tower::{BoxError, ServiceExt};
 use tracing::instrument;
 
 use crate::SgBody;
@@ -91,17 +91,19 @@ impl<S> HyperServiceAdapter<S> {
 
 impl<S> hyper::service::Service<Request<Incoming>> for HyperServiceAdapter<S>
 where
-    S: tower::Service<Request<SgBody>, Error = Infallible, Response = Response<SgBody>> + Clone + Send  + 'static,
+    S: tower::Service<Request<SgBody>, Error = Infallible, Response = Response<SgBody>> + Clone + Send + 'static,
     S::Future: Send + 'static,
 {
     type Response = Response<SgBody>;
     type Error = Infallible;
-    type Future = S::Future;
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
     #[inline]
     fn call(&self, mut req: Request<Incoming>) -> Self::Future {
         req.extensions_mut().insert(self.peer);
-        self.service.clone().call(req.map(SgBody::new))
+        let this = self.service.clone();
+        let req = req.map(SgBody::new);
+        Box::pin(async move { this.ready_oneshot().await?.call(req).await })
     }
 }
 
@@ -134,8 +136,10 @@ where
     }
     #[instrument()]
     pub async fn listen(self) -> Result<(), BoxError> {
+        tracing::debug!("[Sg.Listen] start binding...");
         let listener = tokio::net::TcpListener::bind(self.socket_addr).await?;
         let cancel_token = self.cancel_token;
+        tracing::debug!("[Sg.Listen] start listening...");
         loop {
             tokio::select! {
                 _ = cancel_token.cancelled() => {

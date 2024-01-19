@@ -15,7 +15,10 @@ use crate::{
         route::{Route, Router},
     },
     plugin_layers::MakeSgLayer,
-    utils::fold_sg_layers::fold_sg_layers,
+    utils::{
+        fold_sg_layers::fold_sg_layers,
+        schema_port::{port_to_schema, schema_to_port},
+    },
     SgBody, SgBoxLayer, SgBoxService,
 };
 
@@ -34,8 +37,6 @@ use self::{
     picker::{RouteByMatches, RouteByWeight},
     predicate::FilterByHostnames,
 };
-
-
 
 /****************************************************************************************
 
@@ -145,7 +146,7 @@ impl SgHttpBackendLayer {
 
 impl<S> Layer<S> for SgHttpBackendLayer
 where
-    S: Clone + Service<Request<SgBody>, Error = Infallible, Response = Response<SgBody>> + Send  + 'static,
+    S: Clone + Service<Request<SgBody>, Error = Infallible, Response = Response<SgBody>> + Send + 'static,
     <S as tower_service::Service<Request<SgBody>>>::Future: std::marker::Send,
 {
     type Service = SgHttpBackend<SgBoxService>;
@@ -155,10 +156,10 @@ where
             (None, None, None) => None,
             (host, port, schema) => Some(move |mut req: Request<SgBody>| {
                 let uri = req.uri_mut();
-                let new_scheme = schema.as_deref().unwrap_or_else(|| uri.scheme_str().unwrap_or_default());
                 let (raw_host, raw_port) = if let Some(auth) = uri.authority() { (auth.host(), auth.port_u16()) } else { ("", None) };
                 let new_host = host.as_deref().unwrap_or(raw_host);
                 let new_port = port.or(raw_port);
+                let new_scheme = schema.as_deref().or(uri.scheme_str()).or_else(|| new_port.and_then(port_to_schema)).unwrap_or("http");
                 let mut builder = hyper::http::uri::Uri::builder().scheme(new_scheme);
                 if let Some(new_port) = new_port {
                     builder = builder.authority(format!("{}:{}", new_host, new_port));
@@ -169,6 +170,7 @@ where
                     builder = builder.path_and_query(path_and_query.clone());
                 }
                 if let Ok(uri) = builder.build() {
+                    tracing::trace!("[Sg.Backend] new uri: {uri}");
                     *req.uri_mut() = uri;
                 }
                 req

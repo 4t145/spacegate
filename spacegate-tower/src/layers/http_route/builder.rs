@@ -175,7 +175,7 @@ impl SgHttpBackendLayerBuilder {
         Ok(SgHttpBackendLayer {
             host: self.host.map(Into::into),
             port: self.port,
-            scheme: None,
+            scheme: self.protocol.map(Into::into),
             filters: Arc::from(self.plugins),
             timeout: self.timeout,
             weight: self.weight,

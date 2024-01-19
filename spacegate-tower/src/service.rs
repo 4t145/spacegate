@@ -18,6 +18,12 @@ pub mod ws_client_service;
 ///
 /// This function could be a bottom layer of a http router, it will handle http and websocket request.
 pub async fn http_backend_service_inner(req: Request<SgBody>) -> Result<Response<SgBody>, BoxError> {
+    tracing::trace!(
+        url = %req.uri(),
+        method = %req.method(),
+        version = ?req.version(),
+        "start a backend request"
+    );
     let mut client = get_client();
     if let Some(upgrade) = req.headers().get(UPGRADE) {
         if !upgrade.as_bytes().eq_ignore_ascii_case(b"websocket") {
