@@ -10,9 +10,9 @@ use hyper::{Request, Response};
 use tower::BoxError;
 use tower_service::Service;
 
-use crate::SgBody;
+use crate::{SgBody, extension::matched::Matched};
 
-pub trait Router {
+pub trait Router: Clone {
     type Index: Clone;
     fn route(&self, req: &Request<SgBody>) -> Option<Self::Index>;
     fn all_indexes(&self) -> VecDeque<Self::Index>;
@@ -47,7 +47,8 @@ where
 
 impl<S, R, F> Service<Request<SgBody>> for Route<S, R, F>
 where
-    R: Router,
+    R: Router + Send + Sync + 'static,
+    R::Index: Send + Sync + 'static,
     S: IndexMut<R::Index>,
     S::Output: Service<Request<SgBody>, Response = Response<SgBody>, Error = Infallible> + Send + 'static,
     F: Service<Request<SgBody>, Response = Response<SgBody>, Error = Infallible> + Send + 'static,
@@ -72,8 +73,12 @@ where
         self.fallback.poll_ready(cx)
     }
 
-    fn call(&mut self, req: Request<SgBody>) -> Self::Future {
+    fn call(&mut self, mut req: Request<SgBody>) -> Self::Future {
         if let Some(index) = self.router.route(&req) {
+            req.extensions_mut().insert(Matched {
+                router: self.router.clone(),
+                index: index.clone()
+            });
             let fut = self.services.index_mut(index.clone()).call(req);
             self.unready_services.push_back(index);
             Box::pin(fut)

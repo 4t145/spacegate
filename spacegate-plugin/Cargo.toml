@@ -18,7 +18,7 @@ path = "src/lib.rs"
 
 [dependencies]
 spacegate-tower = { path = "../spacegate-tower" }
-
+tracing = { workspace = true }
 hyper = { version = "1" }
 http-body-util = { version = "0" }
 tower-service = { version = "0.3.2" }

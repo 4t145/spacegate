@@ -16,15 +16,18 @@ pub async fn service(as_server: Upgraded, as_client: Upgraded) -> Result<(), Box
     tokio::task::spawn(async move {
         while let Some(message) = as_server_rx.next().await {
             match message {
-                Ok(message) => match as_client_tx.send(message).await {
-                    Ok(_) => {}
-                    Err(error) => {
-                        tracing::warn!("[SG.Websocket] Client send message error: {error}");
-                        return;
+                Ok(message) => {
+                    tracing::trace!(role = "server", "[SG.Websocket] Gateway recieve message {message}");
+                    match as_client_tx.send(message).await {
+                        Ok(_) => {}
+                        Err(error) => {
+                            tracing::warn!(role = "server", "[SG.Websocket] Client send message error: {error}");
+                            return;
+                        }
                     }
-                },
+                }
                 Err(error) => {
-                    tracing::warn!("[SG.Websocket] Gateway receive message error: {error}");
+                    tracing::warn!(role = "server", "[SG.Websocket] Gateway receive message error: {error}");
                     return;
                 }
             }
@@ -33,15 +36,18 @@ pub async fn service(as_server: Upgraded, as_client: Upgraded) -> Result<(), Box
     tokio::task::spawn(async move {
         while let Some(message) = as_client_rx.next().await {
             match message {
-                Ok(message) => match as_server_tx.send(message).await {
-                    Ok(_) => {}
-                    Err(error) => {
-                        tracing::warn!("[SG.Websocket] Gateway send message error: {error}");
-                        return;
+                Ok(message) => {
+                    tracing::trace!(role = "client", "[SG.Websocket] Gateway recieve message {message}");
+                    match as_server_tx.send(message).await {
+                        Ok(_) => {}
+                        Err(error) => {
+                            tracing::warn!(role = "client", "[SG.Websocket] Gateway send message error: {error}");
+                            return;
+                        }
                     }
-                },
+                }
                 Err(error) => {
-                    tracing::warn!("[SG.Websocket] Client receive message error: {error}");
+                    tracing::warn!(role = "client", "[SG.Websocket] Client receive message error: {error}");
                     return;
                 }
             }

@@ -11,8 +11,8 @@ use hyper::{
     body::{Body, Bytes},
     StatusCode,
 };
-use hyper_rustls::ConfigBuilderExt;
 use hyper_rustls::HttpsConnector;
+use hyper_rustls::{ConfigBuilderExt, HttpsConnectorBuilder};
 use hyper_util::{
     client::legacy::{connect::HttpConnector, Builder, Client},
     rt::TokioExecutor,
@@ -145,10 +145,9 @@ impl Default for SgHttpClient {
 }
 
 impl SgHttpClient {
-    pub fn new<C: Into<Arc<rustls::ClientConfig>>>(tls_config: C) -> Self {
-        let http_connector = HttpConnector::new();
+    pub fn new(tls_config: rustls::ClientConfig) -> Self {
         SgHttpClient {
-            inner: Client::builder(TokioExecutor::new()).build(HttpsConnector::from((http_connector, tls_config))),
+            inner: Client::builder(TokioExecutor::new()).build(HttpsConnectorBuilder::new().with_tls_config(tls_config).https_or_http().enable_http1().build()),
         }
     }
     pub fn new_dangerous() -> Self {

@@ -14,11 +14,14 @@ use crate::{
     },
     plugin_layers::MakeSgLayer,
     utils::fold_sg_layers::fold_sg_layers,
-    SgBody, SgBoxLayer, SgBoxService,
+    SgBody, SgBoxLayer, SgBoxService, extension::matched::Matched,
 };
 
 use http_serde::authority;
-use hyper::{Request, Response};
+use hyper::{
+    header::{HeaderValue, HOST},
+    Request, Response,
+};
 use tower::steer::Steer;
 
 use tower_http::timeout::{Timeout, TimeoutLayer};
@@ -54,7 +57,7 @@ pub struct SgGatewayServices {
 
 #[derive(Debug, Clone)]
 pub struct SgGatewayRouter {
-    routers: Arc<[SgHttpRouter]>,
+    pub routers: Arc<[SgHttpRouter]>,
 }
 
 impl Index<(usize, usize)> for SgGatewayServices {
@@ -71,13 +74,36 @@ impl IndexMut<(usize, usize)> for SgGatewayServices {
     }
 }
 
+// header: example.com:80 matches example.com
+// header: example.com matches example.com
+fn match_host(header: &[u8], matcher: &[u8]) -> bool {
+    if header.len() < matcher.len() {
+        return false;
+    }
+    let mut h_iter = header.iter();
+    let mut m_iter = header.iter();
+    loop {
+        match (h_iter.next(), m_iter.next()) {
+            (Some(h), Some(m)) => {
+                if !h.eq_ignore_ascii_case(m) {
+                    return false;
+                }
+            }
+            (None, None) | (Some(b':'), None) => {
+                return true;
+            }
+            _ => return false,
+        }
+    }
+}
+
 impl Router for SgGatewayRouter {
     type Index = (usize, usize);
-    #[instrument(skip_all, fields(uri = req.uri().to_string(), method = req.method().as_str() ))]
+    #[instrument(skip_all, fields(uri = req.uri().to_string(), method = req.method().as_str(), host = ?req.headers().get(HOST) ))]
     fn route(&self, req: &Request<SgBody>) -> Option<Self::Index> {
+        let host = req.headers().get(HOST).map(HeaderValue::as_bytes);
         for (idx0, route) in self.routers.iter().enumerate() {
-            let host = req.uri().host();
-            if route.hostnames.is_empty() || host.is_some_and(|host| route.hostnames.iter().any(|hostname| hostname == host)) {
+            if route.hostnames.is_empty() || host.is_some_and(|host| route.hostnames.iter().any(|host_match| match_host(host, host_match.as_bytes()))) {
                 for (idx1, r#match) in route.rules.iter().enumerate() {
                     if r#match.match_request(req) {
                         tracing::trace!("matches {match:?}");

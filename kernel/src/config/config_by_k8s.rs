@@ -1008,7 +1008,7 @@ fn convert_filters(filters: Option<Vec<HttpRouteFilter>>) -> Option<Vec<SgRouteF
                         k8s_gateway_api::HttpRouteFilter::URLRewrite { url_rewrite } => SgRouteFilter {
                             code: rewrite::CODE.to_string(),
                             name: None,
-                            spec: TardisFuns::json.obj_to_json(&rewrite::SgFilterRewrite {
+                            spec: TardisFuns::json.obj_to_json(&rewrite::SgFilterRewriteConfig {
                                 hostname: url_rewrite.hostname,
                                 path: url_rewrite.path.map(|path| match path {
                                     k8s_gateway_api::HttpPathModifier::ReplaceFullPath { replace_full_path } => SgHttpPathModifier {

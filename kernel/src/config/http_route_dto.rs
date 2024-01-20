@@ -1,7 +1,7 @@
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
-use spacegate_tower::layers::http_route::match_request::SgHttpRouteMatch;
+pub use spacegate_tower::layers::http_route::match_request::*;
 
 use super::{gateway_dto::SgProtocol, plugin_filter_dto::SgRouteFilter};
 

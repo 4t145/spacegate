@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 
 use crate::{utils::query_kv::QueryKvIter, Request, SgBody};
 
@@ -21,7 +21,21 @@ impl MatchRequest for SgHttpPathMatch {
     fn match_request(&self, req: &Request<SgBody>) -> bool {
         match self {
             SgHttpPathMatch::Exact(path) => req.uri().path() == path,
-            SgHttpPathMatch::Prefix(path) => req.uri().path().starts_with(path),
+            SgHttpPathMatch::Prefix(path) => {
+                let mut path_segments = req.uri().path().split('/').filter(|s| !s.is_empty());
+                let mut prefix_segments = path.split('/').filter(|s| !s.is_empty());
+                loop {
+                    match (path_segments.next(), prefix_segments.next()) {
+                        (Some(path_seg), Some(prefix_seg)) => {
+                            if !path_seg.eq_ignore_ascii_case(prefix_seg) {
+                                return false;
+                            }
+                        }
+                        (_, None) => return true,
+                        (None, Some(_)) => return false,
+                    }
+                }
+            }
             SgHttpPathMatch::Regular(path) => path.is_match(req.uri().path()),
         }
     }
@@ -91,28 +105,26 @@ impl MatchRequest for SgHttpQueryMatch {
 
 pub struct SgHttpMethodMatch(pub String);
 
-
-
 impl MatchRequest for SgHttpMethodMatch {
     fn match_request(&self, req: &Request<SgBody>) -> bool {
         req.method().as_str().eq_ignore_ascii_case(&self.0)
     }
 }
 
-/// HTTPRouteMatch defines the predicate used to match requests to a given action. 
+/// HTTPRouteMatch defines the predicate used to match requests to a given action.
 /// Multiple match types are ANDed together, i.e. the match will evaluate to true only if all conditions are satisfied.
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct SgHttpRouteMatch {
-    /// Path specifies a HTTP request path matcher. 
+    /// Path specifies a HTTP request path matcher.
     /// If this field is not specified, a default prefix match on the “/” path is provided.
     pub path: Option<SgHttpPathMatch>,
-    /// Headers specifies HTTP request header matchers. 
+    /// Headers specifies HTTP request header matchers.
     /// Multiple match values are ANDed together, meaning, a request must match all the specified headers to select the route.
     pub header: Option<Vec<SgHttpHeaderMatch>>,
-    /// Query specifies HTTP query parameter matchers. 
+    /// Query specifies HTTP query parameter matchers.
     /// Multiple match values are ANDed together, meaning, a request must match all the specified query parameters to select the route.
     pub query: Option<Vec<SgHttpQueryMatch>>,
-    /// Method specifies HTTP method matcher. 
+    /// Method specifies HTTP method matcher.
     /// When specified, this route will be matched only if the request has the specified method.
     pub method: Option<Vec<SgHttpMethodMatch>>,
 }

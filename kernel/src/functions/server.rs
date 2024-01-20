@@ -50,6 +50,7 @@ lazy_static! {
     static ref START_JOIN_HANDLE: Arc<Mutex<HashMap<String, JoinHandle<()>>>> = <_>::default();
 }
 
+/// Create a gateway service from plugins and http_routes
 fn create_service(plugins: Vec<SgRouteFilter>, http_routes: Vec<crate::SgHttpRoute>) -> Result<SgBoxService, BoxError> {
     let routes = http_routes
         .into_iter()
@@ -79,7 +80,7 @@ fn create_service(plugins: Vec<SgRouteFilter>, http_routes: Vec<crate::SgHttpRou
                                 if let Some(protocol) = protocol {
                                     builder = builder.protocol(protocol.to_string());
                                 }
-                                dbg!(builder.build())
+                                builder.build()
                             })
                             .collect::<Result<Vec<_>, _>>()?;
                         builder = builder.backends(backends);
@@ -102,6 +103,12 @@ fn create_service(plugins: Vec<SgRouteFilter>, http_routes: Vec<crate::SgHttpRou
     Ok(service)
 }
 
+/// # Gateway
+/// A running spacegate gateway instance
+///
+/// It's created by calling [start](RunningSgGateway::start).
+///
+/// And you can use [shutdown](RunningSgGateway::shutdown) to shutdown it manually.
 pub struct RunningSgGateway {
     token: CancellationToken,
     handle: JoinHandle<()>,
@@ -123,6 +130,7 @@ impl RunningSgGateway {
         global_store.remove(gateway_name.as_ref())
     }
 
+    /// Start a gateway from plugins and http_routes
     #[instrument(fields(gateway=%config.name), skip_all, err)]
     pub fn start(config: SgGateway, http_routes: Vec<SgHttpRoute>) -> Result<Self, BoxError> {
         let service = create_service(config.filters.unwrap_or_default(), http_routes)?;
@@ -218,6 +226,7 @@ impl RunningSgGateway {
         })
     }
 
+    /// Shutdown this gateway
     pub async fn shutdown(self) {
         self.token.cancel();
         match timeout(self.shutdown_timeout, self.handle).await {

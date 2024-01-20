@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use spacegate_tower::{plugin_layers::MakeSgLayer, BoxError, SgBoxLayer};
-use tardis::basic::result::TardisResult;
+use spacegate_tower::{BoxError, SgBoxLayer};
 
 /// RouteFilter defines processing steps that must be completed during the request or response lifecycle.
 ///
@@ -25,23 +24,4 @@ impl SgRouteFilter {
         let plugin_repo = spacegate_plugin::SgPluginRepository::global();
         plugin_repo.create(&self.code, self.spec)?.make_layer()
     }
-}
-
-#[derive(Default, Debug, Serialize, Deserialize, Clone)]
-pub struct SgHttpPathModifier {
-    /// Type defines the type of path modifier.
-    pub kind: SgHttpPathModifierType,
-    /// Value is the value to be used to replace the path during forwarding.
-    pub value: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum SgHttpPathModifierType {
-    /// This type of modifier indicates that the full path will be replaced by the specified value.
-    ReplaceFullPath,
-    /// This type of modifier indicates that any prefix path matches will be replaced by the substitution value.
-    /// For example, a path with a prefix match of “/foo” and a ReplacePrefixMatch substitution of “/bar” will have the “/foo” prefix replaced with “/bar” in matching requests.
-    #[default]
-    ReplacePrefixMatch,
 }
