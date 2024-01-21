@@ -1,7 +1,6 @@
 use crate::{
     extension::reflect::Reflect,
     helper_layers::response_error::{DefaultErrorFormatter, ResponseError, ResponseErrorFuture},
-    plugin_layers::MakeSgLayer,
     SgBody, SgRequestExt, SgResponseExt,
 };
 use futures_util::{Future, FutureExt, TryFutureExt};

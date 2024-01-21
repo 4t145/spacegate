@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use spacegate_tower::{helper_layers::filter::FilterRequest, SgResponseExt};
 use spacegate_tower::{
     helper_layers::filter::{Filter, FilterRequestLayer},
-    plugin_layers::MakeSgLayer,
     SgBoxLayer,
 };
 use tardis::{
@@ -19,7 +18,7 @@ use tower_layer::Layer;
 
 use spacegate_tower::{SgBody, SgBoxService};
 
-use crate::{def_plugin, model::{SgHttpPathModifier,}};
+use crate::{def_plugin, model::{SgHttpPathModifier,}, MakeSgLayer};
 
 
 

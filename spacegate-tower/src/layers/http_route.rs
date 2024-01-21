@@ -6,7 +6,7 @@ use std::{
     convert::Infallible,
     ops::{Index, IndexMut},
     sync::Arc,
-    time::Duration,
+    time::Duration, num::NonZeroU16,
 };
 
 use crate::{
@@ -14,7 +14,6 @@ use crate::{
         filter::{FilterRequest, FilterRequestLayer},
         route::{Route, Router},
     },
-    plugin_layers::MakeSgLayer,
     utils::{
         fold_sg_layers::fold_sg_layers,
         schema_port::{port_to_schema, schema_to_port},
@@ -132,7 +131,7 @@ impl Service<Request<SgBody>> for SgRouteRule {
 pub struct SgHttpBackendLayer {
     pub filters: Arc<[SgBoxLayer]>,
     pub host: Option<Arc<str>>,
-    pub port: Option<u16>,
+    pub port: Option<NonZeroU16>,
     pub scheme: Option<Arc<str>>,
     pub weight: u16,
     pub timeout: Option<Duration>,
@@ -155,10 +154,11 @@ where
         let map_request = match (self.host.clone(), self.port, self.scheme.clone()) {
             (None, None, None) => None,
             (host, port, schema) => Some(move |mut req: Request<SgBody>| {
+                dbg!(&host, &port, &schema);
                 let uri = req.uri_mut();
                 let (raw_host, raw_port) = if let Some(auth) = uri.authority() { (auth.host(), auth.port_u16()) } else { ("", None) };
                 let new_host = host.as_deref().unwrap_or(raw_host);
-                let new_port = port.or(raw_port);
+                let new_port = port.map(u16::from).or(raw_port);
                 let new_scheme = schema.as_deref().or(uri.scheme_str()).or_else(|| new_port.and_then(port_to_schema)).unwrap_or("http");
                 let mut builder = hyper::http::uri::Uri::builder().scheme(new_scheme);
                 if let Some(new_port) = new_port {

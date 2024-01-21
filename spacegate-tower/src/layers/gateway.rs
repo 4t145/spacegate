@@ -12,7 +12,6 @@ use crate::{
         filter::{FilterRequest, FilterRequestLayer},
         route::{Route, Router},
     },
-    plugin_layers::MakeSgLayer,
     utils::fold_sg_layers::fold_sg_layers,
     SgBody, SgBoxLayer, SgBoxService, extension::matched::Matched,
 };

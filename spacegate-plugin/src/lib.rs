@@ -3,16 +3,15 @@ use std::{
     sync::{Arc, OnceLock, RwLock},
 };
 
-use spacegate_tower::plugin_layers::MakeSgLayer;
+pub use spacegate_tower::helper_layers::filter::{Filter, FilterRequest, FilterRequestLayer};
+pub use spacegate_tower::SgBoxLayer;
 pub use tardis::serde_json;
 pub use tardis::serde_json::{Error as SerdeJsonError, Value as JsonValue};
 
-use tower::BoxError;
-
+pub use tower::BoxError;
 pub mod cache;
-pub mod plugins;
 pub mod model;
-
+pub mod plugins;
 
 pub trait Plugin {
     type Error: std::error::Error + Send + Sync + 'static;
@@ -30,7 +29,11 @@ pub struct SgPluginRepository {
 impl SgPluginRepository {
     pub fn global() -> &'static Self {
         static INIT: OnceLock<SgPluginRepository> = OnceLock::new();
-        INIT.get_or_init(SgPluginRepository::new)
+        INIT.get_or_init(|| {
+            let repo = SgPluginRepository::new();
+            repo.register_prelude();
+            repo
+        })
     }
 
     pub fn register_prelude(&self) {
@@ -40,6 +43,7 @@ impl SgPluginRepository {
         self.register::<plugins::header_modifier::HeaderModifierPlugin>();
         self.register::<plugins::inject::InjectPlugin>();
         self.register::<plugins::rewrite::RewritePlugin>();
+        self.register::<plugins::maintenance::SgMaintenancePlugin>()
     }
 
     pub fn new() -> Self {
@@ -71,6 +75,14 @@ impl SgPluginRepository {
             Err(format!("[Sg.Plugin] unregistered sg plugin type {code}").into())
         }
     }
+
+    pub fn create_layer(&self, code: &str, value: JsonValue) -> Result<SgBoxLayer, BoxError> {
+        self.create(code, value)?.make_layer()
+    }
+}
+
+pub trait MakeSgLayer {
+    fn make_layer(&self) -> Result<SgBoxLayer, BoxError>;
 }
 
 /// # Generate plugin definition
@@ -100,6 +112,57 @@ macro_rules! def_plugin {
             fn create(value: $crate::JsonValue) -> Result<Self::MakeLayer, Self::Error> {
                 let filter: $filter_type = $crate::serde_json::from_value(value)?;
                 Ok(filter)
+            }
+        }
+    };
+}
+
+/// # Define Plugin Filter
+///
+/// use `def_filter_plugin` macro to define a filter plugin for an exsited struct which implemented [Filter](spacegate_tower::helper_layers::filter::Filter).
+///
+/// ```
+/// # use serde::{Serialize, Deserialize};
+/// # use hyper::{http::{StatusCode, header::AUTHORIZATION}, Response, Request};
+/// # use spacegate_tower::{SgResponseExt, SgBody};
+/// # use spacegate_plugin::{def_filter_plugin, Filter, MakeSgLayer, SgBoxLayer};
+/// #[derive(Default, Debug, Serialize, Deserialize, Clone)]
+/// pub struct SgFilterAuth {}
+///
+/// impl Filter for SgFilterAuth {
+///     fn filter(&self, req: Request<SgBody>) -> Result<Request<SgBody>, Response<SgBody>> {
+///         if req.headers().contains_key(AUTHORIZATION) {
+///             Ok(req)
+///         } else {
+///             Err(Response::with_code_message(StatusCode::UNAUTHORIZED, "missing authorization header"))
+///         }
+///     }
+/// }
+///
+/// def_filter_plugin!("auth", SgFilterAuthPlugin, SgFilterAuth);
+/// ```
+
+#[macro_export]
+macro_rules! def_filter_plugin {
+    ($CODE:literal, $def:ident, $filter_type:ty) => {
+        pub const CODE: &str = $CODE;
+
+        pub struct $def;
+
+        impl $crate::Plugin for $def {
+            const CODE: &'static str = CODE;
+            type MakeLayer = $filter_type;
+            type Error = $crate::SerdeJsonError;
+            fn create(value: $crate::JsonValue) -> Result<Self::MakeLayer, Self::Error> {
+                let filter: $filter_type = $crate::serde_json::from_value(value)?;
+                Ok(filter)
+            }
+        }
+
+        impl $crate::MakeSgLayer for $filter_type {
+            fn make_layer(&self) -> Result<$crate::SgBoxLayer, $crate::BoxError> {
+                let layer = $crate::FilterRequestLayer::new(self.clone());
+                Ok($crate::SgBoxLayer::new(layer))
             }
         }
     };

@@ -1,4 +1,4 @@
-use futures_util::{future::BoxFuture,  Future};
+use futures_util::{future::BoxFuture, Future};
 use hyper::{body::Incoming, rt::Executor, Request, Response};
 use hyper_util::rt::{self, TokioExecutor, TokioIo};
 use rustls::pki_types::PrivateKeyDer;
@@ -16,7 +16,10 @@ use tokio_util::sync::CancellationToken;
 use tower::{BoxError, ServiceExt};
 use tracing::instrument;
 
-use crate::SgBody;
+use crate::{
+    extension::{peer_addr::PeerAddr, reflect::Reflect},
+    SgBody,
+};
 
 /// Listener embodies the concept of a logical endpoint where a Gateway accepts network connections.
 #[derive(Clone)]
@@ -102,7 +105,9 @@ where
     fn call(&self, mut req: Request<Incoming>) -> Self::Future {
         req.extensions_mut().insert(self.peer);
         let this = self.service.clone();
-        let req = req.map(SgBody::new);
+        let mut req = req.map(SgBody::new);
+        req.extensions_mut().insert(Reflect::default());
+        req.extensions_mut().insert(PeerAddr(self.peer));
         Box::pin(async move { this.ready_oneshot().await?.call(req).await })
     }
 }

@@ -1,8 +1,8 @@
-use std::{sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration, num::NonZeroU16};
 
 use tower::BoxError;
 
-use crate::{plugin_layers::MakeSgLayer, SgBoxLayer};
+use crate::{SgBoxLayer};
 
 use super::{match_request::SgHttpRouteMatch, SgHttpBackendLayer, SgHttpRoute, SgHttpRouteRuleLayer};
 
@@ -119,7 +119,7 @@ impl SgHttpRouteRuleLayerBuilder {
 #[derive(Debug)]
 pub struct SgHttpBackendLayerBuilder {
     host: Option<String>,
-    port: Option<u16>,
+    port: Option<NonZeroU16>,
     protocol: Option<String>,
     plugins: Vec<SgBoxLayer>,
     timeout: Option<Duration>,
@@ -164,7 +164,7 @@ impl SgHttpBackendLayerBuilder {
         self
     }
     pub fn port(mut self, port: u16) -> Self {
-        self.port = Some(port);
+        self.port = NonZeroU16::new(port);
         self
     }
     pub fn protocol(mut self, protocol: String) -> Self {

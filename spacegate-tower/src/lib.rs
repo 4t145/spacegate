@@ -165,7 +165,6 @@ mod test {
                 SgHttpBackendLayer, SgHttpRoute, SgHttpRouteRuleLayer,
             },
         },
-        plugin_layers::SgLayer,
         service::http_client_service::SgHttpClient,
         SgBody, SgResponseExt,
     };

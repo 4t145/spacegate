@@ -14,11 +14,10 @@ use tower_layer::Stack;
 
 use spacegate_tower::{
     helper_layers::async_filter::{AsyncFilter, AsyncFilterRequest, AsyncFilterRequestLayer},
-    plugin_layers::MakeSgLayer,
     SgBody, SgBoxLayer, SgResponseExt, extension::{reflect::Reflect, gateway_name::GatewayName},
 };
 
-use crate::{def_plugin, cache::Cache};
+use crate::{def_plugin, cache::Cache, MakeSgLayer};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RateLimitConfig {

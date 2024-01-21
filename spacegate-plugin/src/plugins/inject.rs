@@ -1,19 +1,16 @@
-use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
-use futures_util::{Future, TryFutureExt};
 use hyper::{header::HeaderName, Request};
 use hyper::{Method, Response, Uri};
 use serde::{Deserialize, Serialize};
 use spacegate_tower::extension::reflect::Reflect;
 use spacegate_tower::helper_layers::bidirection_filter::{Bdf, BdfLayer, BoxReqFut, BoxRespFut};
-use spacegate_tower::plugin_layers::MakeSgLayer;
 use spacegate_tower::service::http_client_service::get_client;
 use spacegate_tower::{SgBody, SgResponseExt};
 use tower::BoxError;
 
-use crate::def_plugin;
+use crate::{def_plugin, MakeSgLayer};
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

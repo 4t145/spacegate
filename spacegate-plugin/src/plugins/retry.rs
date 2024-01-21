@@ -12,11 +12,10 @@ use tower_layer::Layer;
 
 use spacegate_tower::{
     helper_layers::async_filter::{dump::Dump, AsyncFilterRequest, AsyncFilterRequestLayer},
-    plugin_layers::MakeSgLayer,
     SgBody, SgBoxLayer,
 };
 
-use crate::def_plugin;
+use crate::{def_plugin, MakeSgLayer};
 
 pub struct RetryLayer {
     inner_layer: TowerRetryLayer<RetryPolicy>,

@@ -45,3 +45,6 @@ hyper-util = { version = "*" }
 # future
 futures-util = { version = "*" }
 tokio-tungstenite = { version = "*" }
+
+# plugin-maintenance
+ipnet = { version = "2"}

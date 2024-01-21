@@ -6,12 +6,11 @@ use spacegate_tower::helper_layers::filter::{Filter, FilterRequest, FilterReques
 use spacegate_tower::layers::gateway::SgGatewayRouter;
 use spacegate_tower::layers::http_route::match_request::{MatchRequest, SgHttpPathMatch};
 use spacegate_tower::layers::http_route::SgHttpRoute;
-use spacegate_tower::plugin_layers::MakeSgLayer;
 use spacegate_tower::{SgBody, SgBoxLayer, SgResponseExt};
 use tardis::basic::{error::TardisError, result::TardisResult};
 use tardis::url::Url;
 
-use crate::def_plugin;
+use crate::{def_plugin, MakeSgLayer};
 use crate::model::SgHttpPathModifier;
 
 // def_filter!("rewrite", SgFilterRewriteDef, SgFilterRewrite);

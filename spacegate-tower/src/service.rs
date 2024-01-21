@@ -10,6 +10,8 @@ use crate::service::http_client_service::get_client;
 use crate::SgBody;
 use crate::SgBoxService;
 use crate::SgResponseExt;
+
+pub mod echo;
 pub mod http_client_service;
 pub mod ws_client_service;
 
@@ -60,4 +62,8 @@ pub async fn http_backend_service(req: Request<SgBody>) -> Result<Response<SgBod
 
 pub fn get_http_backend_service() -> SgBoxService {
     SgBoxService::new(tower::util::service_fn(http_backend_service))
+}
+
+pub fn get_echo_service() -> SgBoxService {
+    SgBoxService::new(tower::util::service_fn(echo::echo))
 }

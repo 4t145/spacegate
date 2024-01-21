@@ -4,13 +4,12 @@ use hyper::header::HeaderValue;
 use hyper::{header::HeaderName, HeaderMap};
 use hyper::{Request, Response};
 use serde::{Deserialize, Serialize};
-use spacegate_tower::plugin_layers::MakeSgLayer;
 use tower::util::{MapRequestLayer, MapResponseLayer};
 use tower_layer::Layer;
 
 use spacegate_tower::{SgBody, SgBoxService};
 
-use crate::def_plugin;
+use crate::{def_plugin, MakeSgLayer};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Default)]
 pub enum SgFilterHeaderModifierKind {
