@@ -8,12 +8,14 @@ use std::{
 };
 
 use crate::{
+    extension::matched::Matched,
     helper_layers::{
-        filter::{FilterRequest, FilterRequestLayer},
+        filter::{response_anyway::ResponseAnyway, FilterRequest, FilterRequestLayer},
+        reload::Reloader,
         route::{Route, Router},
     },
     utils::fold_sg_layers::fold_sg_layers,
-    SgBody, SgBoxLayer, SgBoxService, extension::matched::Matched,
+    SgBody, SgBoxLayer, SgBoxService,
 };
 
 use http_serde::authority;
@@ -37,10 +39,13 @@ use super::http_route::{match_request::MatchRequest, SgHttpRoute, SgHttpRouter};
 
 *****************************************************************************************/
 
+pub type SgGatewayRoute = Route<SgGatewayRoutedServices, SgGatewayRouter, SgBoxService>;
+
 pub struct SgGatewayLayer {
     http_routes: Arc<[SgHttpRoute]>,
     http_plugins: Arc<[SgBoxLayer]>,
     http_fallback: SgBoxLayer,
+    pub http_route_reloader: Reloader<SgGatewayRoute>,
 }
 
 impl SgGatewayLayer {
@@ -50,7 +55,7 @@ impl SgGatewayLayer {
 }
 
 #[derive(Debug, Clone)]
-pub struct SgGatewayServices {
+pub struct SgGatewayRoutedServices {
     services: Vec<Vec<SgBoxService>>,
 }
 
@@ -59,7 +64,7 @@ pub struct SgGatewayRouter {
     pub routers: Arc<[SgHttpRouter]>,
 }
 
-impl Index<(usize, usize)> for SgGatewayServices {
+impl Index<(usize, usize)> for SgGatewayRoutedServices {
     type Output = SgBoxService;
 
     fn index(&self, index: (usize, usize)) -> &Self::Output {
@@ -67,7 +72,7 @@ impl Index<(usize, usize)> for SgGatewayServices {
     }
 }
 
-impl IndexMut<(usize, usize)> for SgGatewayServices {
+impl IndexMut<(usize, usize)> for SgGatewayRoutedServices {
     fn index_mut(&mut self, index: (usize, usize)) -> &mut Self::Output {
         &mut self.services[index.0][index.1]
     }
@@ -131,28 +136,38 @@ where
     S: Clone + Service<Request<SgBody>, Error = Infallible, Response = Response<SgBody>> + Send + 'static,
     <S as tower_service::Service<Request<SgBody>>>::Future: std::marker::Send,
 {
-    type Service = Route<SgGatewayServices, SgGatewayRouter, SgBoxService>;
+    type Service = SgBoxService;
 
     fn layer(&self, inner: S) -> Self::Service {
         let gateway_plugins = self.http_plugins.iter().collect::<SgBoxLayer>();
-
-        let mut services = Vec::with_capacity(self.http_routes.len());
-        let mut routers = Vec::with_capacity(self.http_routes.len());
-        for route in self.http_routes.iter() {
-            let route_plugins = route.plugins.iter().collect::<SgBoxLayer>();
-            let mut rules_services = Vec::with_capacity(route.rules.len());
-            let mut rules_router = Vec::with_capacity(route.rules.len());
-            for rule in route.rules.iter() {
-                let rule_service = gateway_plugins.layer(route_plugins.layer(rule.layer(inner.clone())));
-                rules_services.push(rule_service);
-                rules_router.push(rule.r#match.clone());
-            }
-            services.push(rules_services);
-            routers.push(SgHttpRouter {
-                hostnames: route.hostnames.clone(),
-                rules: rules_router.into(),
-            });
-        }
-        Route::new(SgGatewayServices { services }, SgGatewayRouter { routers: routers.into() }, self.http_fallback.layer(inner))
+        let route = create_http_router(&self.http_routes, &self.http_fallback, inner);
+        let reloader = self.http_route_reloader.clone();
+        let reload_service = reloader.into_layer().layer(route);
+        gateway_plugins.layer(reload_service)
     }
+}
+
+pub fn create_http_router<S>(routes: &[SgHttpRoute], fallback: &SgBoxLayer, inner: S) -> Route<SgGatewayRoutedServices, SgGatewayRouter, SgBoxService>
+where
+    S: Clone + Service<Request<SgBody>, Error = Infallible, Response = Response<SgBody>> + Send + 'static,
+    <S as tower_service::Service<Request<SgBody>>>::Future: std::marker::Send,
+{
+    let mut services = Vec::with_capacity(routes.len());
+    let mut routers = Vec::with_capacity(routes.len());
+    for route in routes {
+        let route_plugins = route.plugins.iter().collect::<SgBoxLayer>();
+        let mut rules_services = Vec::with_capacity(route.rules.len());
+        let mut rules_router = Vec::with_capacity(route.rules.len());
+        for rule in route.rules.iter() {
+            let rule_service = route_plugins.layer(rule.layer(inner.clone()));
+            rules_services.push(rule_service);
+            rules_router.push(rule.r#match.clone());
+        }
+        services.push(rules_services);
+        routers.push(SgHttpRouter {
+            hostnames: route.hostnames.clone(),
+            rules: rules_router.into(),
+        });
+    }
+    Route::new(SgGatewayRoutedServices { services }, SgGatewayRouter { routers: routers.into() }, fallback.layer(inner))
 }

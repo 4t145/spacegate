@@ -10,7 +10,7 @@ use hyper::{Request, Response};
 use tower::BoxError;
 use tower_service::Service;
 
-use crate::{SgBody, extension::matched::Matched};
+use crate::{extension::matched::Matched, SgBody};
 
 pub trait Router: Clone {
     type Index: Clone;
@@ -74,17 +74,19 @@ where
     }
 
     fn call(&mut self, mut req: Request<SgBody>) -> Self::Future {
-        if let Some(index) = self.router.route(&req) {
+        let fut: Self::Future = if let Some(index) = self.router.route(&req) {
             req.extensions_mut().insert(Matched {
                 router: self.router.clone(),
-                index: index.clone()
+                index: index.clone(),
             });
             let fut = self.services.index_mut(index.clone()).call(req);
             self.unready_services.push_back(index);
+
             Box::pin(fut)
         } else {
             let fut = self.fallback.call(req);
             Box::pin(fut)
-        }
+        };
+        fut
     }
 }

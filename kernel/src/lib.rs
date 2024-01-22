@@ -25,10 +25,7 @@ use functions::server;
 pub use http;
 pub use hyper;
 pub use spacegate_plugin;
-pub use spacegate_tower::{
-    self, helper_layers,
-    BoxError, SgBody, SgBoxLayer, SgBoxService, SgRequestExt, SgResponseExt,
-};
+pub use spacegate_tower::{self, helper_layers, BoxError, SgBody, SgBoxLayer, SgBoxService, SgRequestExt, SgResponseExt};
 use tardis::{basic::result::TardisResult, log, tokio::signal};
 pub mod config;
 pub mod constants;
@@ -75,6 +72,10 @@ pub async fn do_startup(gateway: SgGateway, http_routes: Vec<SgHttpRoute>) -> Re
     let running_gateway = server::RunningSgGateway::start(gateway, http_routes)?;
     server::RunningSgGateway::global_save(gateway_name, running_gateway);
     Ok(())
+}
+
+pub async fn update_route(gateway_name: &str, http_routes: Vec<SgHttpRoute>) -> Result<(), BoxError> {
+    server::RunningSgGateway::global_update(gateway_name, http_routes).await
 }
 
 pub async fn shutdown(gateway_name: &str) -> Result<(), BoxError> {

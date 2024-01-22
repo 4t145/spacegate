@@ -154,7 +154,6 @@ where
         let map_request = match (self.host.clone(), self.port, self.scheme.clone()) {
             (None, None, None) => None,
             (host, port, schema) => Some(move |mut req: Request<SgBody>| {
-                dbg!(&host, &port, &schema);
                 let uri = req.uri_mut();
                 let (raw_host, raw_port) = if let Some(auth) = uri.authority() { (auth.host(), auth.port_u16()) } else { ("", None) };
                 let new_host = host.as_deref().unwrap_or(raw_host);

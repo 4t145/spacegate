@@ -1,15 +1,21 @@
+use std::sync::OnceLock;
+
 use crate::{
-    helper_layers::filter::{response_anyway::ResponseAnyway, FilterRequestLayer},
+    helper_layers::{
+        filter::{response_anyway::ResponseAnyway, FilterRequestLayer},
+        reload::Reloader,
+    },
     layers::http_route::{SgHttpRoute, SgHttpRouter},
     SgBoxLayer,
 };
 
-use super::SgGatewayLayer;
+use super::{SgGatewayLayer, SgGatewayRoute};
 
 pub struct SgGatewayLayerBuilder {
     http_routers: Vec<SgHttpRoute>,
     http_plugins: Vec<SgBoxLayer>,
     http_fallback: SgBoxLayer,
+    http_route_reloader: Reloader<SgGatewayRoute>,
 }
 
 impl Default for SgGatewayLayerBuilder {
@@ -18,15 +24,23 @@ impl Default for SgGatewayLayerBuilder {
     }
 }
 
+pub fn default_gateway_route_fallback() -> &'static SgBoxLayer {
+    static LAYER: OnceLock<SgBoxLayer> = OnceLock::new();
+    LAYER.get_or_init(|| {
+        SgBoxLayer::new(FilterRequestLayer::new(ResponseAnyway {
+            status: hyper::StatusCode::NOT_FOUND,
+            message: "[Sg.HttpRouteRule] no rule matched".to_string().into(),
+        }))
+    })
+}
+
 impl SgGatewayLayerBuilder {
     pub fn new() -> Self {
         Self {
             http_routers: Vec::new(),
             http_plugins: Vec::new(),
-            http_fallback: SgBoxLayer::new(FilterRequestLayer::new(ResponseAnyway {
-                status: hyper::StatusCode::NOT_FOUND,
-                message: "[Sg.HttpRouteRule] no rule matched".to_string().into(),
-            })),
+            http_fallback: default_gateway_route_fallback().clone(),
+            http_route_reloader: Default::default(),
         }
     }
     pub fn http_router(mut self, route: SgHttpRoute) -> Self {
@@ -49,11 +63,16 @@ impl SgGatewayLayerBuilder {
         self.http_fallback = fallback;
         self
     }
+    pub fn http_route_reloader(mut self, reloader: Reloader<SgGatewayRoute>) -> Self {
+        self.http_route_reloader = reloader;
+        self
+    }
     pub fn build(self) -> SgGatewayLayer {
         SgGatewayLayer {
             http_routes: self.http_routers.into(),
             http_plugins: self.http_plugins.into(),
             http_fallback: self.http_fallback,
+            http_route_reloader: self.http_route_reloader,
         }
     }
 }

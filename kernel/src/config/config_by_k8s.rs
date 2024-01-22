@@ -21,6 +21,7 @@ use tardis::{
     TardisFuns,
 };
 
+use crate::update_route;
 use crate::{
     constants::{self, GATEWAY_ANNOTATION_IGNORE_TLS_VERIFICATION},
     do_startup, shutdown,
@@ -525,9 +526,7 @@ async fn overload_http_route(gateway_obj: Gateway, http_route_api_refs: (&Api<Ht
         do_startup(gateway_config, vec![]).await.expect("[SG.Config] Failed to restart gateway");
     } else {
         let http_route_configs: Vec<SgHttpRoute> = process_http_route_config(http_route_objs).await.expect("[SG.Config] Failed to process http_route config");
-        shutdown(&gateway_config.name).await.expect("[SG.Config] Failed to shutdown gateway");
-        log::trace!("[SG.Config] Gateway config change to:{:?}", gateway_config);
-        do_startup(gateway_config, http_route_configs).await.expect("[SG.Config] Failed to restart gateway");
+        update_route(&gateway_config.name, http_route_configs).await.expect("[SG.Config] Failed to update route config");
     }
 }
 

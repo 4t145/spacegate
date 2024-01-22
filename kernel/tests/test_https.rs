@@ -102,7 +102,7 @@ W0X+/YToWPeWivw3Kbo05oCob0NUi3fXtiTHng==
 
 #[tokio::test]
 async fn test_https() -> Result<(), BoxError> {
-    env::set_var("RUST_LOG", "info,spacegate_kernel=trace,spacegate_tower=trace");
+    env::set_var("RUST_LOG", "info,spacegate_kernel=trace,spacegate_tower=trace,tower_service=trace,rust_tls=trace");
     let tracing = TardisTracingInitializer::default().with_fmt_layer().with_env_layer().init();
     spacegate_kernel::do_startup(
         SgGateway {

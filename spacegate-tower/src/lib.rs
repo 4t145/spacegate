@@ -113,6 +113,9 @@ impl SgBoxLayer {
 
         Self { boxed: Arc::new(layer) }
     }
+    pub fn layer_boxed(&self, inner: SgBoxService) -> SgBoxService {
+        self.boxed.layer(inner)
+    }
 }
 
 impl<S> Layer<S> for SgBoxLayer

@@ -2,6 +2,7 @@ use std::{env, time::Duration};
 
 mod init_cache_container;
 use serde_json::Value;
+use spacegate_tower::BoxError;
 use tardis::{
     basic::result::TardisResult,
     cache::cache_client::TardisCacheClient,
@@ -12,7 +13,7 @@ use tardis::{
 };
 
 #[tokio::test]
-async fn test_config_by_redis() -> TardisResult<()> {
+async fn test_config_by_redis() -> Result<(), BoxError> {
     env::set_var("RUST_LOG", "info,spacegate_kernel=trace");
     tracing_subscriber::fmt::init();
     let http_client = TardisWebClient::init(&WebClientModuleConfig {

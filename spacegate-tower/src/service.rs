@@ -46,8 +46,8 @@ pub async fn http_backend_service_inner(req: Request<SgBody>) -> Result<Response
         tracing::trace!(upgrade = true, "finish backend request");
         Ok(resp)
     } else {
-        tracing::trace!(upgrade = false, "finish backend request");
         let resp = client.request(req).await;
+        tracing::trace!(upgrade = false, "finish backend request");
         Ok(resp)
     }
 }

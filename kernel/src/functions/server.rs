@@ -17,7 +17,8 @@ use http::{HeaderValue, Request, Response, StatusCode};
 use lazy_static::lazy_static;
 use serde_json::json;
 use spacegate_tower::{
-    layers::gateway::SgGatewayLayer,
+    helper_layers::reload::Reloader,
+    layers::gateway::{builder::default_gateway_route_fallback, create_http_router, SgGatewayLayer, SgGatewayRoute},
     listener::SgListen,
     service::{get_http_backend_service, http_backend_service},
     BoxError, Layer, Service, SgBoxService,
@@ -50,9 +51,8 @@ lazy_static! {
     static ref START_JOIN_HANDLE: Arc<Mutex<HashMap<String, JoinHandle<()>>>> = <_>::default();
 }
 
-/// Create a gateway service from plugins and http_routes
-fn create_service(plugins: Vec<SgRouteFilter>, http_routes: Vec<crate::SgHttpRoute>) -> Result<SgBoxService, BoxError> {
-    let routes = http_routes
+fn collect_tower_http_route(http_routes: Vec<crate::SgHttpRoute>) -> Result<Vec<spacegate_tower::layers::http_route::SgHttpRoute>, BoxError> {
+    http_routes
         .into_iter()
         .map(|route| {
             let plugins = route.filters.unwrap_or_default();
@@ -95,11 +95,24 @@ fn create_service(plugins: Vec<SgRouteFilter>, http_routes: Vec<crate::SgHttpRou
                 .collect::<Result<Vec<_>, _>>()?;
             spacegate_tower::layers::http_route::SgHttpRoute::builder().hostnames(route.hostnames.unwrap_or_default()).plugins(plugins).rules(rules).build()
         })
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<Vec<_>, _>>()
+}
+
+/// Create a gateway service from plugins and http_routes
+pub(crate) fn create_service(plugins: Vec<SgRouteFilter>, http_routes: Vec<crate::SgHttpRoute>, reloader: Reloader<SgGatewayRoute>) -> Result<SgBoxService, BoxError> {
+    let routes = collect_tower_http_route(http_routes)?;
     let plugins = plugins.into_iter().map(SgRouteFilter::into_layer).collect::<Result<Vec<_>, _>>()?;
-    let gateway_layer = spacegate_tower::layers::gateway::SgGatewayLayer::builder().http_routers(routes).http_plugins(plugins).build();
+    let gateway_layer = spacegate_tower::layers::gateway::SgGatewayLayer::builder().http_routers(routes).http_plugins(plugins).http_route_reloader(reloader).build();
+
     let backend_service = get_http_backend_service();
     let service = SgBoxService::new(gateway_layer.layer(backend_service));
+    Ok(service)
+}
+
+/// create a new sg gateway route, which can be sent to reloader
+pub(crate) fn create_router_service(http_routes: Vec<crate::SgHttpRoute>) -> Result<SgGatewayRoute, BoxError> {
+    let routes = collect_tower_http_route(http_routes)?;
+    let service = create_http_router(&routes, default_gateway_route_fallback(), get_http_backend_service());
     Ok(service)
 }
 
@@ -112,6 +125,7 @@ fn create_service(plugins: Vec<SgRouteFilter>, http_routes: Vec<crate::SgHttpRou
 pub struct RunningSgGateway {
     token: CancellationToken,
     handle: JoinHandle<()>,
+    pub reloader: Reloader<SgGatewayRoute>,
     shutdown_timeout: Duration,
 }
 
@@ -130,10 +144,27 @@ impl RunningSgGateway {
         global_store.remove(gateway_name.as_ref())
     }
 
+    pub async fn global_update(gateway_name: impl AsRef<str>, http_routes: Vec<crate::SgHttpRoute>) -> Result<(), BoxError> {
+        let gateway_name = gateway_name.as_ref();
+        let service = create_router_service(http_routes)?;
+        let reloader = {
+            let global_store = Self::global_store().lock().expect("poisoned lock");
+            if let Some(gw) = global_store.get(gateway_name) {
+                gw.reloader.clone()
+            } else {
+                warn!("no such gateway in global repository: {gateway_name}");
+                return Ok(())
+            }
+        };
+        reloader.reload(service).await;
+        Ok(())
+    }
+
     /// Start a gateway from plugins and http_routes
     #[instrument(fields(gateway=%config.name), skip_all, err)]
     pub fn start(config: SgGateway, http_routes: Vec<SgHttpRoute>) -> Result<Self, BoxError> {
-        let service = create_service(config.filters.unwrap_or_default(), http_routes)?;
+        let reloader = <Reloader<SgGatewayRoute>>::default();
+        let service = create_service(config.filters.unwrap_or_default(), http_routes, reloader.clone())?;
         if config.listeners.is_empty() {
             return Err("[SG.Server] Missing Listeners".into());
         }
@@ -223,6 +254,7 @@ impl RunningSgGateway {
             token: cancel_token,
             handle: task,
             shutdown_timeout: Duration::from_secs(10),
+            reloader,
         })
     }
 
