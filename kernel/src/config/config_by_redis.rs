@@ -65,6 +65,8 @@ pub async fn init(conf_url: &str, check_interval_sec: u64) -> TardisResult<Vec<(
                     log::trace!("[SG.Config] Config change found, {changed_obj}: {changed_gateway_name}");
 
                     if let Some(gateway_config) = cache_client.hget(CONF_GATEWAY_KEY, changed_gateway_name).await.expect("[SG.Config] cache_client hget failed") {
+                        log::trace!("[SG.Config] new gateway config {gateway_config}");
+                        
                         // Added or modified
                         let gateway_config = tardis::TardisFuns::json.str_to_obj::<SgGateway>(&gateway_config).expect("[SG.Config] Gateway Config parse error");
                         let http_route_configs =

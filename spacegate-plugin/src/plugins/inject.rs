@@ -4,7 +4,7 @@ use std::time::Duration;
 use hyper::{header::HeaderName, Request};
 use hyper::{Method, Response, Uri};
 use serde::{Deserialize, Serialize};
-use spacegate_tower::extension::reflect::Reflect;
+use spacegate_tower::extension::Reflect;
 use spacegate_tower::helper_layers::bidirection_filter::{Bdf, BdfLayer, BoxReqFut, BoxRespFut};
 use spacegate_tower::service::http_client_service::get_client;
 use spacegate_tower::{SgBody, SgResponseExt};

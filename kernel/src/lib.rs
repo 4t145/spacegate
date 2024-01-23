@@ -26,7 +26,7 @@ pub use http;
 pub use hyper;
 pub use spacegate_plugin;
 pub use spacegate_tower::{self, helper_layers, BoxError, SgBody, SgBoxLayer, SgBoxService, SgRequestExt, SgResponseExt};
-use tardis::{basic::result::TardisResult, log, tokio::signal};
+use tardis::{basic::result::TardisResult, log::{self as tracing, instrument}, tokio::signal};
 pub mod config;
 pub mod constants;
 pub mod functions;
@@ -58,13 +58,14 @@ pub async fn startup(k8s_mode: bool, namespace_or_conf_uri: Option<String>, chec
     Ok(())
 }
 
+#[instrument]
 pub async fn do_startup(gateway: SgGateway, http_routes: Vec<SgHttpRoute>) -> Result<(), BoxError> {
     let gateway_name = gateway.name.clone();
     #[cfg(feature = "cache")]
     {
         // Initialize cache instances
         if let Some(url) = &gateway.parameters.redis_url {
-            log::trace!("Initialize cache client...url:{url}");
+            tracing::trace!("Initialize cache client...url:{url}");
             functions::cache_client::init(gateway_name.clone(), url).await?;
         }
     }
@@ -74,10 +75,12 @@ pub async fn do_startup(gateway: SgGateway, http_routes: Vec<SgHttpRoute>) -> Re
     Ok(())
 }
 
+#[instrument]
 pub async fn update_route(gateway_name: &str, http_routes: Vec<SgHttpRoute>) -> Result<(), BoxError> {
     server::RunningSgGateway::global_update(gateway_name, http_routes).await
 }
 
+#[instrument]
 pub async fn shutdown(gateway_name: &str) -> Result<(), BoxError> {
     // Remove route instances
     // http_route::remove(gateway_name).await?;
@@ -96,10 +99,10 @@ pub async fn shutdown(gateway_name: &str) -> Result<(), BoxError> {
 pub async fn wait_graceful_shutdown() -> TardisResult<()> {
     match signal::ctrl_c().await {
         Ok(_) => {
-            log::info!("Received ctrl+c signal, shutting down...");
+            tracing::info!("Received ctrl+c signal, shutting down...");
         }
         Err(error) => {
-            log::error!("Received the ctrl+c signal, but with an error: {error}");
+            tracing::error!("Received the ctrl+c signal, but with an error: {error}");
         }
     }
     Ok(())

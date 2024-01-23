@@ -1,7 +1,7 @@
 use hyper::header::{HeaderValue, HOST};
 use hyper::{Request, Response, StatusCode, Uri};
 use serde::{Deserialize, Serialize};
-use spacegate_tower::extension::matched::Matched;
+use spacegate_tower::extension::Matched;
 use spacegate_tower::helper_layers::filter::{Filter, FilterRequest, FilterRequestLayer};
 use spacegate_tower::layers::gateway::SgGatewayRouter;
 use spacegate_tower::layers::http_route::match_request::{MatchRequest, SgHttpPathMatch};

@@ -3,12 +3,13 @@ pub mod builder;
 use std::{
     convert::Infallible,
     ops::{Index, IndexMut},
+    str::FromStr,
     sync::Arc,
     time::Duration,
 };
 
 use crate::{
-    extension::matched::Matched,
+    extension::Matched,
     helper_layers::{
         filter::{response_anyway::ResponseAnyway, FilterRequest, FilterRequestLayer},
         reload::Reloader,
@@ -31,7 +32,7 @@ use tower_layer::Layer;
 use tower_service::Service;
 use tracing::instrument;
 
-use super::http_route::{match_request::MatchRequest, SgHttpRoute, SgHttpRouter};
+use super::http_route::{match_hostname::HostnameTree, match_request::MatchRequest, SgHttpRoute, SgHttpRouter};
 
 /****************************************************************************************
 
@@ -62,6 +63,7 @@ pub struct SgGatewayRoutedServices {
 #[derive(Debug, Clone)]
 pub struct SgGatewayRouter {
     pub routers: Arc<[SgHttpRouter]>,
+    pub hostname_tree: Arc<HostnameTree<usize>>,
 }
 
 impl Index<(usize, usize)> for SgGatewayRoutedServices {
@@ -105,18 +107,14 @@ impl Router for SgGatewayRouter {
     type Index = (usize, usize);
     #[instrument(skip_all, fields(uri = req.uri().to_string(), method = req.method().as_str(), host = ?req.headers().get(HOST) ))]
     fn route(&self, req: &Request<SgBody>) -> Option<Self::Index> {
-        let host = req.headers().get(HOST).map(HeaderValue::as_bytes);
-        for (idx0, route) in self.routers.iter().enumerate() {
-            if route.hostnames.is_empty() || host.is_some_and(|host| route.hostnames.iter().any(|host_match| match_host(host, host_match.as_bytes()))) {
-                for (idx1, r#match) in route.rules.iter().enumerate() {
-                    if r#match.match_request(req) {
-                        tracing::trace!("matches {match:?}");
-                        return Some((idx0, idx1));
-                    }
-                }
+        let host = req.headers().get(HOST).and_then(|x| x.to_str().ok())?;
+        let idx0 = *self.hostname_tree.get(host)?;
+        for (idx1, r#match) in self.routers.as_ref().index(idx0).rules.iter().enumerate() {
+            if r#match.match_request(req) {
+                tracing::trace!("matches {match:?}");
+                return Some((idx0, idx1));
             }
         }
-        tracing::trace!("not matched");
         None
     }
 
@@ -154,7 +152,11 @@ where
 {
     let mut services = Vec::with_capacity(routes.len());
     let mut routers = Vec::with_capacity(routes.len());
+    let mut hostname_tree = HostnameTree::new();
     for route in routes {
+        for hostname in route.hostnames.iter() {
+            hostname_tree.set(hostname, services.len());
+        }
         let route_plugins = route.plugins.iter().collect::<SgBoxLayer>();
         let mut rules_services = Vec::with_capacity(route.rules.len());
         let mut rules_router = Vec::with_capacity(route.rules.len());
@@ -163,11 +165,22 @@ where
             rules_services.push(rule_service);
             rules_router.push(rule.r#match.clone());
         }
+        let idx = services.len();
+        for hostname in route.hostnames.iter() {
+            hostname_tree.set(hostname, idx);
+        }
         services.push(rules_services);
         routers.push(SgHttpRouter {
             hostnames: route.hostnames.clone(),
             rules: rules_router.into(),
         });
     }
-    Route::new(SgGatewayRoutedServices { services }, SgGatewayRouter { routers: routers.into() }, fallback.layer(inner))
+    Route::new(
+        SgGatewayRoutedServices { services },
+        SgGatewayRouter {
+            routers: routers.into(),
+            hostname_tree: Arc::new(hostname_tree),
+        },
+        fallback.layer(inner),
+    )
 }

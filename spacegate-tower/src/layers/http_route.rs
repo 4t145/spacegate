@@ -2,6 +2,7 @@ mod builder;
 pub mod match_request;
 mod picker;
 mod predicate;
+pub mod match_hostname;
 use std::{
     convert::Infallible,
     ops::{Index, IndexMut},

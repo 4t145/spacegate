@@ -4,7 +4,7 @@ use hyper::{Request, Response};
 use tokio_tungstenite::tungstenite::http::Extensions;
 use tracing::instrument;
 
-use crate::{extension::reflect::Reflect, SgBody, SgResponseExt};
+use crate::{extension::Reflect, SgBody, SgResponseExt};
 
 #[instrument]
 pub async fn echo(mut req: Request<SgBody>) -> Result<Response<SgBody>, Infallible> {

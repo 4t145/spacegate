@@ -10,7 +10,7 @@ use hyper::{Request, Response};
 use tower::BoxError;
 use tower_service::Service;
 
-use crate::{extension::matched::Matched, SgBody};
+use crate::{extension::Matched, SgBody};
 
 pub trait Router: Clone {
     type Index: Clone;

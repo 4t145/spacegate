@@ -7,9 +7,10 @@ pub mod listener;
 pub mod plugin_layers;
 pub mod service;
 pub mod utils;
+pub mod header;
 
 pub use body::SgBody;
-use extension::reflect::Reflect;
+use extension::Reflect;
 use std::{
     convert::Infallible,
     fmt::{self, Display},

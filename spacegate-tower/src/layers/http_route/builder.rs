@@ -1,8 +1,8 @@
-use std::{sync::Arc, time::Duration, num::NonZeroU16};
+use std::{num::NonZeroU16, sync::Arc, time::Duration};
 
 use tower::BoxError;
 
-use crate::{SgBoxLayer};
+use crate::SgBoxLayer;
 
 use super::{match_request::SgHttpRouteMatch, SgHttpBackendLayer, SgHttpRoute, SgHttpRouteRuleLayer};
 
@@ -47,7 +47,10 @@ impl SgHttpRouteLayerBuilder {
         self.plugins.extend(plugins);
         self
     }
-    pub fn build(self) -> Result<SgHttpRoute, BoxError> {
+    pub fn build(mut self) -> Result<SgHttpRoute, BoxError> {
+        if self.hostnames.iter().any(|host| host == "*") {
+            self.hostnames = vec!["*".to_string()]
+        }
         Ok(SgHttpRoute {
             plugins: Arc::from(self.plugins),
             hostnames: self.hostnames.into(),

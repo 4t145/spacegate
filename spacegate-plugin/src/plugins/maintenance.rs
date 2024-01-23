@@ -1,7 +1,7 @@
 use hyper::header::{HeaderValue, ACCEPT, CONTENT_TYPE};
 use hyper::{Request, Response, StatusCode};
 use ipnet::IpNet;
-use spacegate_tower::extension::peer_addr::PeerAddr;
+use spacegate_tower::extension::PeerAddr;
 use spacegate_tower::helper_layers::filter::{Filter, FilterRequestLayer};
 use spacegate_tower::{SgBody, SgBoxLayer, SgResponseExt};
 use std::iter;
@@ -206,7 +206,7 @@ mod test {
     use hyper::StatusCode;
     use hyper::{http::Extensions, Method, Request, Version};
     use serde_json::json;
-    use spacegate_tower::extension::peer_addr::PeerAddr;
+    use spacegate_tower::extension::PeerAddr;
     use spacegate_tower::service::get_echo_service;
     use spacegate_tower::SgBody;
     use tardis::chrono::{Duration, Local};

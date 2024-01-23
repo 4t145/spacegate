@@ -17,7 +17,8 @@ use tower::{BoxError, ServiceExt};
 use tracing::instrument;
 
 use crate::{
-    extension::{peer_addr::PeerAddr, reflect::Reflect},
+    extension::{PeerAddr, Reflect},
+    utils::with_length_or_chunked,
     SgBody,
 };
 
@@ -52,34 +53,6 @@ impl<S> SgListen<S> {
         self
     }
 }
-// fn temp() {
-//     if let Some(tls) = &self.tls {
-//         tracing::debug!("[SG.Server] Tls is init...mode:{:?}", tls.mode);
-//         if SgTlsMode::Terminate == tls.mode {
-//             {
-//                 let certs = rustls_pemfile::certs(&mut tls.cert.as_bytes()).filter_map(Result::ok).collect::<Vec<_>>();
-//                 let keys = rustls_pemfile::read_all(&mut tls.key.as_bytes()).filter_map(Result::ok);
-
-//                 let key = keys.find_map(|key| {
-//                     match key {
-//                         rustls_pemfile::Item::Pkcs1Key(k) => Some(PrivateKeyDer::Pkcs1(k)),
-//                         rustls_pemfile::Item::Pkcs8Key(k) => Some(PrivateKeyDer::Pkcs8(k)),
-//                         rustls_pemfile::Item::Sec1Key(k) => Some(PrivateKeyDer::Sec1(k)),
-//                         _ => None,
-//                     }
-//                 }).ok_or(BoxError::from("[SG.Server] Can not found a valid Tls private key"))?;
-
-//                 let mut cfg = rustls::ServerConfig::builder()
-
-//                     .with_no_client_auth()
-//                     .with_single_cert(certs, key)
-//                     ?;
-//                 cfg.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec(), b"http/1.0".to_vec()];
-//                 Arc::new(cfg)
-//             };
-//         }
-//     };
-// }
 
 #[derive(Debug, Clone)]
 pub struct HyperServiceAdapter<S> {
@@ -108,7 +81,11 @@ where
         let mut req = req.map(SgBody::new);
         req.extensions_mut().insert(Reflect::default());
         req.extensions_mut().insert(PeerAddr(self.peer));
-        Box::pin(async move { this.ready_oneshot().await?.call(req).await })
+        Box::pin(async move {
+            let mut resp = this.ready_oneshot().await?.call(req).await?;
+            with_length_or_chunked(&mut resp);
+            Ok(resp)
+        })
     }
 }
 

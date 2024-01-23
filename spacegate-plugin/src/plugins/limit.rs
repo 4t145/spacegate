@@ -14,7 +14,7 @@ use tower_layer::Stack;
 
 use spacegate_tower::{
     helper_layers::async_filter::{AsyncFilter, AsyncFilterRequest, AsyncFilterRequestLayer},
-    SgBody, SgBoxLayer, SgResponseExt, extension::{reflect::Reflect, gateway_name::GatewayName},
+    SgBody, SgBoxLayer, SgResponseExt, extension::{Reflect, GatewayName},
 };
 
 use crate::{def_plugin, cache::Cache, MakeSgLayer};
