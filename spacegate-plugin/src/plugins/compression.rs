@@ -9,12 +9,13 @@
 use std::convert::Infallible;
 use std::{cmp::Ordering, str::FromStr};
 
-use crate::{plugin_layers::comde::content_encoding::ContentEncodingType, SgBoxService};
+// use crate::{plugin_layers::comde::content_encoding::ContentEncodingType, };
 use futures_util::FutureExt;
+use http_body_util::BodyExt;
 use hyper::header::{HeaderValue, ACCEPT_ENCODING, CONTENT_ENCODING};
 use hyper::{Request, Response};
 use serde::{Deserialize, Serialize};
-use spacegate_tower::SgBody;
+use spacegate_tower::{SgBody, SgBoxService};
 use tower::{service_fn, BoxError, ServiceExt};
 use tower_http::compression::{Compression as TowerCompression, CompressionLayer as TowerCompressionLayer};
 use tower_http::decompression::{Decompression as TowerDecompression, DecompressionLayer as TowerDecompressionLayer};
@@ -40,11 +41,11 @@ impl DecompressionLayer {}
 //     inner: TowerCompression,
 // }
 
-pub struct ComdeService {
-    inner: SgBoxService,
-}
+// pub struct ComdeService {
+//     inner: SgBoxService,
+// }
 
-impl ComdeService {}
+// impl ComdeService {}
 
 // pub fn echo_body<B: hyper::body::Body>(mut req: Request<B>) -> Response<B> {
 //     Response::new(req.into_body())
@@ -112,7 +113,7 @@ pub struct ComdecomService<S> {
 }
 impl<S> Service<Request<SgBody>> for ComdecomService<S>
 where
-    S: Service<Request<SgBody>, Response = Response<SgBody>>,
+    S: Service<Request<SgBody>, Response = Response<SgBody>, Error = Infallible>,
 {
     type Response = Response<SgBody>;
     type Error = Infallible;
@@ -123,7 +124,10 @@ where
     }
 
     fn call(&mut self, req: Request<SgBody>) -> Self::Future {
-        // let fut = self.inner.call(req).map(|b|b.map(|x|x.map(SgBody)));
-        todo!()
+        let fut = self.inner.call(req);
+        Box::pin(async move {
+            let response = fut.await.expect("infallible");
+            return Ok(response.map(|b| SgBody::new(b.map_err(Box::new))));
+        })
     }
 }
