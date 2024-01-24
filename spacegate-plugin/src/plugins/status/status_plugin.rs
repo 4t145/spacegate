@@ -43,16 +43,15 @@ impl Status {
 
 pub(crate) async fn create_status_html<B>(
     _: Request<B>,
-    _gateway_name: Arc<Mutex<String>>,
-    _cache_key: Arc<Mutex<String>>,
-    title: Arc<Mutex<String>>,
+    _gateway_name: Arc<str>,
+    _cache_key: Arc<str>,
+    title: Arc<str>,
 ) -> Result<Response<Full<hyper::body::Bytes>>, hyper::Error> {
     let keys;
     #[cfg(feature = "cache")]
     {
-        let cache_client = functions::cache_client::get(&_gateway_name.lock().await).await.expect("get cache client error!");
-        let cache_key = _cache_key.lock().await;
-        keys = cache_client.hkeys(&cache_key).await.expect("get cache keys error!");
+        let cache_client = functions::cache_client::get(_gateway_name.as_ref()).await.expect("get cache client error!");
+        keys = cache_client.hkeys(_cache_key.as_ref()).await.expect("get cache keys error!");
     }
     #[cfg(not(feature = "cache"))]
     {
@@ -64,9 +63,8 @@ pub(crate) async fn create_status_html<B>(
         let status;
         #[cfg(feature = "cache")]
         {
-            let cache_client = functions::cache_client::get(&_gateway_name.lock().await).await.expect("get cache client error!");
-            let cache_key = _cache_key.lock().await;
-            status = get_status(&key, &cache_key, &cache_client).await.expect("");
+            let cache_client = functions::cache_client::get(_gateway_name.as_ref()).await.expect("get cache client error!");
+            status = get_status(&key, _cache_key.as_ref(), &cache_client).await.expect("");
         }
         #[cfg(not(feature = "cache"))]
         {
@@ -86,8 +84,7 @@ pub(crate) async fn create_status_html<B>(
             );
         };
     }
-    let title = &title.lock().await;
-    let html = STATUS_TEMPLATE.replace("{title}", title).replace("{status}", &service_html);
+    let html = STATUS_TEMPLATE.replace("{title}", title.as_ref()).replace("{status}", &service_html);
 
     Ok(Response::new(Full::new(html.into())))
 }

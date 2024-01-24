@@ -1,24 +1,33 @@
 use std::sync::Arc;
 
 use hyper::{Request, Response};
+pub mod server;
 pub mod sliding_window;
 pub mod status_plugin;
-pub mod server;
 use serde::{Deserialize, Serialize};
 use spacegate_tower::{
     extension::BackendHost,
-    helper_layers::status::{self, Status},
-    SgBody,
+    helper_layers::{
+        self,
+        status::{self, Status},
+    },
+    layers::gateway::builder::SgGatewayLayerBuilder,
+    SgBody, SgBoxLayer,
 };
-use tardis::{chrono::Utc, tokio::sync::RwLock};
+use tardis::{
+    chrono::{Duration, Utc},
+    tokio::{self, sync::RwLock},
+};
 use tower::BoxError;
+
+use crate::MakeSgLayer;
 
 use self::{
     sliding_window::SlidingWindowCounter,
     status_plugin::{get_status, update_status},
 };
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(default)]
 pub struct SgFilterStatusConfig {
     #[serde(alias = "serv_addr")]
@@ -29,9 +38,7 @@ pub struct SgFilterStatusConfig {
     pub unhealthy_threshold: u16,
     /// second
     pub interval: u64,
-    #[cfg(feature = "cache")]
     pub status_cache_key: String,
-    #[cfg(feature = "cache")]
     pub window_cache_key: String,
 }
 
@@ -43,14 +50,12 @@ impl Default for SgFilterStatusConfig {
             title: "System Status".to_string(),
             unhealthy_threshold: 3,
             interval: 5,
-            #[cfg(feature = "cache")]
             status_cache_key: "spacegate:cache:plugin:status".to_string(),
-            #[cfg(feature = "cache")]
             window_cache_key: sliding_window::DEFAULT_CONF_WINDOW_KEY.to_string(),
         }
     }
 }
-
+#[derive(Debug, Clone)]
 pub struct NoCachePolicy {
     counter: Arc<RwLock<SlidingWindowCounter>>,
     unhealthy_threshold: u16,
@@ -89,6 +94,35 @@ impl status::Policy for NoCachePolicy {
                 });
             }
         }
+    }
+}
+
+impl MakeSgLayer for SgFilterStatusConfig {
+    fn make_layer(&self) -> Result<SgBoxLayer, BoxError> {
+        Err(BoxError::from("status plugin is only supported on gateway layer"))
+    }
+    fn install_on_gateway(&self, gateway: SgGatewayLayerBuilder) -> Result<SgGatewayLayerBuilder, BoxError> {
+        let gateway_name = gateway.gateway_name.clone();
+        let cancel_guard = gateway.cancel_token.clone();
+        let config = self.clone();
+        tokio::spawn(async move {
+            if let Err(e) = server::launch_status_server(&config, gateway_name, cancel_guard).await {
+                tracing::error!("[SG.Filter.Status] launch status server error: {e}");
+            }
+        });
+
+        #[cfg(feature = "cache")]
+        unimplemented!("cache feature is not supported yet");
+        #[cfg(not(feature = "cache"))]
+        let layer = {
+            let counter = Arc::new(RwLock::new(SlidingWindowCounter::new(Duration::seconds(self.interval as i64), 60)));
+            let policy = NoCachePolicy {
+                counter,
+                unhealthy_threshold: self.unhealthy_threshold,
+            };
+            SgBoxLayer::new(helper_layers::status::StatusLayer::new(policy))
+        };
+        Ok(gateway.http_plugin(layer))
     }
 }
 

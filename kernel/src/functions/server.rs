@@ -99,10 +99,20 @@ fn collect_tower_http_route(http_routes: Vec<crate::SgHttpRoute>) -> Result<Vec<
 }
 
 /// Create a gateway service from plugins and http_routes
-pub(crate) fn create_service(plugins: Vec<SgRouteFilter>, http_routes: Vec<crate::SgHttpRoute>, reloader: Reloader<SgGatewayRoute>) -> Result<SgBoxService, BoxError> {
+pub(crate) fn create_service(
+    gateway_name: &str,
+    cancel_token: CancellationToken,
+    plugins: Vec<SgRouteFilter>,
+    http_routes: Vec<crate::SgHttpRoute>,
+    reloader: Reloader<SgGatewayRoute>,
+) -> Result<SgBoxService, BoxError> {
     let routes = collect_tower_http_route(http_routes)?;
     let plugins = plugins.into_iter().map(SgRouteFilter::into_layer).collect::<Result<Vec<_>, _>>()?;
-    let gateway_layer = spacegate_tower::layers::gateway::SgGatewayLayer::builder().http_routers(routes).http_plugins(plugins).http_route_reloader(reloader).build();
+    let gateway_layer = spacegate_tower::layers::gateway::SgGatewayLayer::builder(gateway_name.to_owned(), cancel_token)
+        .http_routers(routes)
+        .http_plugins(plugins)
+        .http_route_reloader(reloader)
+        .build();
 
     let backend_service = get_http_backend_service();
     let service = SgBoxService::new(gateway_layer.layer(backend_service));
@@ -122,8 +132,11 @@ pub(crate) fn create_router_service(http_routes: Vec<crate::SgHttpRoute>) -> Res
 /// It's created by calling [start](RunningSgGateway::start).
 ///
 /// And you can use [shutdown](RunningSgGateway::shutdown) to shutdown it manually.
+/// 
+/// Though, after it has been dropped, it will shutdown automatically.
 pub struct RunningSgGateway {
     token: CancellationToken,
+    _guard: tokio_util::sync::DropGuard,
     handle: JoinHandle<()>,
     pub reloader: Reloader<SgGatewayRoute>,
     shutdown_timeout: Duration,
@@ -153,7 +166,7 @@ impl RunningSgGateway {
                 gw.reloader.clone()
             } else {
                 warn!("no such gateway in global repository: {gateway_name}");
-                return Ok(())
+                return Ok(());
             }
         };
         reloader.reload(service).await;
@@ -163,8 +176,9 @@ impl RunningSgGateway {
     /// Start a gateway from plugins and http_routes
     #[instrument(fields(gateway=%config.name), skip_all, err)]
     pub fn start(config: SgGateway, http_routes: Vec<SgHttpRoute>) -> Result<Self, BoxError> {
+        let cancel_token = CancellationToken::new();
         let reloader = <Reloader<SgGatewayRoute>>::default();
-        let service = create_service(config.filters.unwrap_or_default(), http_routes, reloader.clone())?;
+        let service = create_service(&config.name, cancel_token.clone(), config.filters.unwrap_or_default(), http_routes, reloader.clone())?;
         if config.listeners.is_empty() {
             return Err("[SG.Server] Missing Listeners".into());
         }
@@ -187,7 +201,6 @@ impl RunningSgGateway {
                 ..Default::default()
             })?;
         }
-        let cancel_token = CancellationToken::new();
 
         let gateway_name = Arc::new(config.name.to_string());
         let mut listens: Vec<SgListen<SgBoxService>> = Vec::new();
@@ -250,8 +263,11 @@ impl RunningSgGateway {
             }
             while (join_set.join_next().await).is_some() {}
         });
+
+        let cancel_guard = cancel_token.clone().drop_guard();
         Ok(RunningSgGateway {
             token: cancel_token,
+            _guard: cancel_guard,
             handle: task,
             shutdown_timeout: Duration::from_secs(10),
             reloader,

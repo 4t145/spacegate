@@ -7,7 +7,6 @@ use tardis::basic::{error::TardisError, result::TardisResult};
 use tardis::cache::Script;
 use tardis::chrono::{DateTime, Duration, Utc};
 
-#[cfg(feature = "cache")]
 pub(super) const DEFAULT_CONF_WINDOW_KEY: &str = "sg:plugin:filter:window:key";
 
 #[cfg(feature = "cache")]

@@ -1,4 +1,6 @@
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
+
+use tokio_util::sync::CancellationToken;
 
 use crate::{
     helper_layers::{
@@ -12,17 +14,14 @@ use crate::{
 use super::{SgGatewayLayer, SgGatewayRoute};
 
 pub struct SgGatewayLayerBuilder {
+    pub gateway_name: Arc<str>,
+    pub cancel_token: CancellationToken,
     http_routers: Vec<SgHttpRoute>,
     http_plugins: Vec<SgBoxLayer>,
     http_fallback: SgBoxLayer,
     http_route_reloader: Reloader<SgGatewayRoute>,
 }
 
-impl Default for SgGatewayLayerBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
 pub fn default_gateway_route_fallback() -> &'static SgBoxLayer {
     static LAYER: OnceLock<SgBoxLayer> = OnceLock::new();
@@ -35,8 +34,10 @@ pub fn default_gateway_route_fallback() -> &'static SgBoxLayer {
 }
 
 impl SgGatewayLayerBuilder {
-    pub fn new() -> Self {
+    pub fn new(gateway_name: impl Into<Arc<str>>, cancel_token: CancellationToken) -> Self {
         Self {
+            cancel_token,
+            gateway_name: gateway_name.into(),
             http_routers: Vec::new(),
             http_plugins: Vec::new(),
             http_fallback: default_gateway_route_fallback().clone(),

@@ -4,6 +4,10 @@ use std::{
 };
 
 pub use spacegate_tower::helper_layers::filter::{Filter, FilterRequest, FilterRequestLayer};
+use spacegate_tower::layers::{
+    gateway::builder::SgGatewayLayerBuilder,
+    http_route::builder::{SgHttpBackendLayerBuilder, SgHttpRouteLayerBuilder, SgHttpRouteRuleLayerBuilder},
+};
 pub use spacegate_tower::SgBoxLayer;
 pub use tardis::serde_json;
 pub use tardis::serde_json::{Error as SerdeJsonError, Value as JsonValue};
@@ -13,13 +17,32 @@ pub mod cache;
 pub mod model;
 pub mod plugins;
 
-pub trait Plugin<L> {
+pub trait Plugin {
     type Error: std::error::Error + Send + Sync + 'static;
     type MakeLayer: MakeSgLayer + 'static;
     const CODE: &'static str;
     fn create(value: JsonValue) -> Result<Self::MakeLayer, Self::Error>;
 }
 
+pub trait MakeSgLayer {
+    fn make_layer(&self) -> Result<SgBoxLayer, BoxError>;
+    fn install_on_gateway(&self, gateway: SgGatewayLayerBuilder) -> Result<SgGatewayLayerBuilder, BoxError> {
+        let layer = self.make_layer()?;
+        Ok(gateway.http_plugin(layer))
+    }
+    fn install_on_backend(&self, backend: SgHttpBackendLayerBuilder) -> Result<SgHttpBackendLayerBuilder, BoxError> {
+        let layer = self.make_layer()?;
+        Ok(backend.plugin(layer))
+    }
+    fn install_on_route(&self, route: SgHttpRouteLayerBuilder) -> Result<SgHttpRouteLayerBuilder, BoxError> {
+        let layer = self.make_layer()?;
+        Ok(route.plugin(layer))
+    }
+    fn install_on_rule(&self, rule: SgHttpRouteRuleLayerBuilder) -> Result<SgHttpRouteRuleLayerBuilder, BoxError> {
+        let layer = self.make_layer()?;
+        Ok(rule.plugin(layer))
+    }
+}
 
 type BoxCreateFn = Box<dyn Fn(JsonValue) -> Result<Box<dyn MakeSgLayer>, BoxError> + Send + Sync>;
 #[derive(Default, Clone)]
@@ -81,10 +104,6 @@ impl SgPluginRepository {
     pub fn create_layer(&self, code: &str, value: JsonValue) -> Result<SgBoxLayer, BoxError> {
         self.create(code, value)?.make_layer()
     }
-}
-
-pub trait MakeSgLayer {
-    fn make_layer(&self) -> Result<SgBoxLayer, BoxError>;
 }
 
 /// # Generate plugin definition

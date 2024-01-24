@@ -20,6 +20,7 @@ pub trait Policy {
     fn on_response(&self, res: &Response<SgBody>);
 }
 
+#[derive(Debug, Clone)]
 pub struct Status<P, S> {
     policy: Arc<P>,
     inner: S,

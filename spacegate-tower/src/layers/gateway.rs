@@ -24,6 +24,7 @@ use hyper::{
     header::{HeaderValue, HOST},
     Request, Response,
 };
+use tokio_util::sync::CancellationToken;
 use tower::steer::Steer;
 
 use tower_http::timeout::{Timeout, TimeoutLayer};
@@ -50,8 +51,13 @@ pub struct SgGatewayLayer {
 }
 
 impl SgGatewayLayer {
-    pub fn builder() -> builder::SgGatewayLayerBuilder {
-        builder::SgGatewayLayerBuilder::new()
+    /// Create a new gateway layer.
+    /// # Arguments
+    /// * `gateway_name` - The gateway name, this may be used by plugins.
+    /// * `cancel_token` - A cancel token hints wether the gateway server is still alive.
+    /// 
+    pub fn builder(gateway_name: impl Into<Arc<str>>, cancel_token: CancellationToken) -> builder::SgGatewayLayerBuilder {
+        builder::SgGatewayLayerBuilder::new(gateway_name, cancel_token)
     }
 }
 
