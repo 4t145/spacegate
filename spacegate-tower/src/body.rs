@@ -1,5 +1,6 @@
 use http_body_util::{combinators::BoxBody, BodyExt, Empty, Full};
 use hyper::body::{Body, Bytes};
+use tower::BoxError;
 
 use crate::utils::never;
 
@@ -9,8 +10,8 @@ pub mod dump;
 
 #[derive(Debug)]
 pub struct SgBody {
-    pub(crate) body: BoxBody<Bytes, hyper::Error>,
-    dump: Option<Bytes>,
+    pub(crate) body: BoxBody<Bytes, BoxError>,
+    pub(crate) dump: Option<Bytes>,
 }
 
 impl Default for SgBody {
@@ -21,7 +22,7 @@ impl Default for SgBody {
 
 impl Body for SgBody {
     type Data = Bytes;
-    type Error = hyper::Error;
+    type Error = BoxError;
 
     fn poll_frame(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Option<Result<hyper::body::Frame<Self::Data>, Self::Error>>> {
         let mut pinned = std::pin::pin!(&mut self.body);
@@ -30,7 +31,17 @@ impl Body for SgBody {
 }
 
 impl SgBody {
-    pub fn new(body: impl Body<Data = Bytes, Error = hyper::Error> + Send + Sync + 'static) -> Self {
+    pub fn new<E>(body: impl Body<Data = Bytes, Error = E> + Send + Sync + 'static) -> Self
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        Self {
+            body: BoxBody::new(body.map_err(BoxError::from)),
+            dump: None,
+        }
+    }
+    pub fn new_boxed_error(body: impl Body<Data = Bytes, Error = BoxError> + Send + Sync + 'static) -> Self
+    {
         Self {
             body: BoxBody::new(body),
             dump: None,
@@ -52,7 +63,7 @@ impl SgBody {
     pub fn is_dumped(&self) -> bool {
         self.dump.is_none()
     }
-    pub async fn dump(self) -> Result<Self, hyper::Error> {
+    pub async fn dump(self) -> Result<Self, BoxError> {
         let bytes = self.body.collect().await?.to_bytes();
         Ok(Self {
             body: BoxBody::new(Full::new(bytes.clone()).map_err(never)),

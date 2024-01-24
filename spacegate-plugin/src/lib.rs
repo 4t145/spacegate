@@ -13,12 +13,13 @@ pub mod cache;
 pub mod model;
 pub mod plugins;
 
-pub trait Plugin {
+pub trait Plugin<L> {
     type Error: std::error::Error + Send + Sync + 'static;
     type MakeLayer: MakeSgLayer + 'static;
     const CODE: &'static str;
     fn create(value: JsonValue) -> Result<Self::MakeLayer, Self::Error>;
 }
+
 
 type BoxCreateFn = Box<dyn Fn(JsonValue) -> Result<Box<dyn MakeSgLayer>, BoxError> + Send + Sync>;
 #[derive(Default, Clone)]
@@ -43,7 +44,8 @@ impl SgPluginRepository {
         self.register::<plugins::header_modifier::HeaderModifierPlugin>();
         self.register::<plugins::inject::InjectPlugin>();
         self.register::<plugins::rewrite::RewritePlugin>();
-        self.register::<plugins::maintenance::SgMaintenancePlugin>()
+        self.register::<plugins::maintenance::MaintenancePlugin>();
+        self.register::<plugins::decompression::DecompressionPlugin>()
     }
 
     pub fn new() -> Self {

@@ -3,5 +3,5 @@ pub mod response_error;
 pub mod filter;
 pub mod async_filter;
 pub mod route;
-pub mod cache;
 pub mod reload;
+pub mod status;

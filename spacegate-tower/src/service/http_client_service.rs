@@ -158,7 +158,7 @@ impl SgHttpClient {
         match self.inner.request(req).await.map_err(Response::internal_error) {
             Ok(mut response) => {
                 if let Some(reflect) = reflect {
-                    response.extensions_mut().insert(reflect);
+                    response.extensions_mut().extend(reflect.into_inner());
                 }
                 response.map(SgBody::new)
             }

@@ -196,7 +196,7 @@ impl MakeSgLayer for SgFilterMaintenanceConfig {
     }
 }
 
-def_plugin!("maintenance", SgMaintenancePlugin, SgFilterMaintenanceConfig);
+def_plugin!("maintenance", MaintenancePlugin, SgFilterMaintenanceConfig);
 
 #[cfg(test)]
 mod test {

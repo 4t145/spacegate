@@ -1,16 +1,18 @@
 mod builder;
+pub mod match_hostname;
 pub mod match_request;
 mod picker;
 mod predicate;
-pub mod match_hostname;
 use std::{
     convert::Infallible,
+    num::NonZeroU16,
     ops::{Index, IndexMut},
     sync::Arc,
-    time::Duration, num::NonZeroU16,
+    time::Duration,
 };
 
 use crate::{
+    extension::{BackendHost, Reflect},
     helper_layers::{
         filter::{FilterRequest, FilterRequestLayer},
         route::{Route, Router},
@@ -155,6 +157,12 @@ where
         let map_request = match (self.host.clone(), self.port, self.scheme.clone()) {
             (None, None, None) => None,
             (host, port, schema) => Some(move |mut req: Request<SgBody>| {
+                if let Some(ref host) = host {
+                    if let Some(reflect) = req.extensions_mut().get_mut::<Reflect>() {
+                        reflect.insert(BackendHost::new(host.clone()));
+                    }
+                    req.extensions_mut().insert(BackendHost::new(host.clone()));
+                }
                 let uri = req.uri_mut();
                 let (raw_host, raw_port) = if let Some(auth) = uri.authority() { (auth.host(), auth.port_u16()) } else { ("", None) };
                 let new_host = host.as_deref().unwrap_or(raw_host);

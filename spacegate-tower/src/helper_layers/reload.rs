@@ -76,11 +76,9 @@ where
 
     fn poll_ready(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
         let Ok(mut next) = self.next_service.try_lock() else {
-            tracing::trace!("mutex locked, but ignore this time");
             return self.current_service.poll_ready(cx);
         };
         if let Some(new_service) = next.take() {
-            tracing::trace!("apply reload");
             self.current_service = new_service
         }
         drop(next);

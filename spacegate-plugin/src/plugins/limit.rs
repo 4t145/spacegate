@@ -92,7 +92,7 @@ impl RateLimitConfig {
     async fn req_filter(&self, req: Request<SgBody>) -> Result<Request<SgBody>, Response<SgBody>> {
         let id = &self.id;
         if let Some(max_request_number) = &self.max_request_number {
-            if let Some(gateway_name) = req.extensions().get::<Reflect>().and_then(|r|r.get::<GatewayName>()) {
+            if let Some(gateway_name) = req.extensions().get::<GatewayName>() {
                 let mut conn = Cache::get(gateway_name).await.map_err(Response::<SgBody>::internal_error)?.cmd().await.map_err(Response::<SgBody>::internal_error)?;
                 let result: &bool = &script()
                     // counter key

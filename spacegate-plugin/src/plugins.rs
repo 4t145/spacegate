@@ -5,4 +5,5 @@ pub mod redirect;
 pub mod retry;
 pub mod rewrite;
 pub mod maintenance;
-pub mod compression;
+pub mod decompression;
+pub mod status;

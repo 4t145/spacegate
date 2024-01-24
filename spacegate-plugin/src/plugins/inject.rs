@@ -72,13 +72,12 @@ impl SgFilterInject {
 
     async fn resp_filter(&self, resp: Response<SgBody>) -> Result<Response<SgBody>, BoxError> {
         if let Some(resp_inject_url) = &self.resp_inject_url {
-            let (mut real_parts, real_body) = resp.into_parts();
-            let reflect = real_parts.extensions.get_mut::<Reflect>().expect("should have reflect extension");
+            let (real_parts, real_body) = resp.into_parts();
             let mut inject_request = Request::builder().method(Method::PUT).uri(resp_inject_url).body(real_body)?;
-            if let Some(real_method) = reflect.get::<InjectRealMethod>() {
+            if let Some(real_method) = real_parts.extensions.get::<InjectRealMethod>() {
                 inject_request.headers_mut().insert(SG_INJECT_REAL_METHOD, real_method.0.as_str().parse()?);
             }
-            if let Some(real_url) = reflect.get::<InjectRealUrl>() {
+            if let Some(real_url) = real_parts.extensions.get::<InjectRealUrl>() {
                 inject_request.headers_mut().insert(SG_INJECT_REAL_URL, real_url.0.to_string().parse()?);
             }
             let mut client = get_client();

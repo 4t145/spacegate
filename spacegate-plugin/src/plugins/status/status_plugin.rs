@@ -1,14 +1,16 @@
-use http::{Request, Response};
-use hyper::Body;
+use http_body_util::Full;
+use hyper::{Request, Response};
 use serde::{Deserialize, Serialize};
+use spacegate_tower::SgBody;
+use tower::BoxError;
 use std::sync::Arc;
 
-use tardis::{basic::result::TardisResult, tokio::sync::Mutex};
-
+use tardis::{tokio::sync::Mutex};
+type BoxResult<T> = Result<T, BoxError>;
 #[cfg(feature = "cache")]
 use crate::functions::{self, cache_client};
 #[cfg(not(feature = "cache"))]
-use lazy_static::lazy_static;
+use tardis::tardis_static;
 #[cfg(not(feature = "cache"))]
 use std::collections::HashMap;
 #[cfg(not(feature = "cache"))]
@@ -16,8 +18,8 @@ use tardis::tokio::sync::RwLock;
 #[cfg(feature = "cache")]
 use tardis::{cache::cache_client::TardisCacheClient, TardisFuns};
 #[cfg(not(feature = "cache"))]
-lazy_static! {
-    static ref SERVER_STATUS: Arc<RwLock<HashMap<String, Status>>> = <_>::default();
+tardis_static! {
+    server_status: Arc<RwLock<HashMap<String, Status>>> = <_>::default();
 }
 const STATUS_TEMPLATE: &str = include_str!("status.html");
 
@@ -39,12 +41,12 @@ impl Status {
     }
 }
 
-pub(crate) async fn create_status_html(
-    _: Request<Body>,
+pub(crate) async fn create_status_html<B>(
+    _: Request<B>,
     _gateway_name: Arc<Mutex<String>>,
     _cache_key: Arc<Mutex<String>>,
     title: Arc<Mutex<String>>,
-) -> Result<Response<Body>, hyper::Error> {
+) -> Result<Response<Full<hyper::body::Bytes>>, hyper::Error> {
     let keys;
     #[cfg(feature = "cache")]
     {
@@ -54,7 +56,7 @@ pub(crate) async fn create_status_html(
     }
     #[cfg(not(feature = "cache"))]
     {
-        let status = SERVER_STATUS.read().await;
+        let status = server_status().read().await;
         keys = status.keys().cloned().collect::<Vec<String>>();
     }
     let mut service_html = "".to_string();
@@ -87,44 +89,44 @@ pub(crate) async fn create_status_html(
     let title = &title.lock().await;
     let html = STATUS_TEMPLATE.replace("{title}", title).replace("{status}", &service_html);
 
-    Ok(Response::new(Body::from(html)))
+    Ok(Response::new(Full::new(html.into())))
 }
 
 #[cfg(feature = "cache")]
-pub(crate) async fn update_status(server_name: &str, _cache_key: &str, client: impl AsRef<TardisCacheClient>, status: Status) -> TardisResult<()> {
+pub(crate) async fn update_status(server_name: &str, _cache_key: &str, client: impl AsRef<TardisCacheClient>, status: Status) -> BoxResult<()> {
     client.as_ref().hset(_cache_key, server_name, &TardisFuns::json.obj_to_string(&status)?).await?;
     Ok(())
 }
 #[cfg(not(feature = "cache"))]
-pub(crate) async fn update_status(server_name: &str, status: Status) -> TardisResult<()> {
-    let mut server_status = SERVER_STATUS.write().await;
+pub(crate) async fn update_status(server_name: &str, status: Status) -> BoxResult<()> {
+    let mut server_status = server_status().write().await;
     server_status.insert(server_name.to_string(), status);
     Ok(())
 }
 
 #[cfg(feature = "cache")]
-pub(crate) async fn get_status(server_name: &str, cache_key: &str, client: impl AsRef<TardisCacheClient>) -> TardisResult<Option<Status>> {
+pub(crate) async fn get_status(server_name: &str, cache_key: &str, client: impl AsRef<TardisCacheClient>) -> BoxResult<Option<Status>> {
     match client.as_ref().hget(cache_key, server_name).await? {
         Some(result) => Ok(Some(TardisFuns::json.str_to_obj(&result)?)),
         None => Ok(None),
     }
 }
 #[cfg(not(feature = "cache"))]
-pub(crate) async fn get_status(server_name: &str) -> TardisResult<Option<Status>> {
-    let server_status = SERVER_STATUS.read().await;
+pub(crate) async fn get_status(server_name: &str) -> BoxResult<Option<Status>> {
+    let server_status = server_status().read().await;
     Ok(server_status.get(server_name).cloned())
 }
 
 #[cfg(feature = "cache")]
-pub(crate) async fn clean_status(cache_key: &str, gateway_name: &str) -> TardisResult<()> {
+pub(crate) async fn clean_status(cache_key: &str, gateway_name: &str) -> BoxResult<()> {
     let client = cache_client::get(gateway_name).await?;
     client.as_ref().del(cache_key).await?;
     Ok(())
 }
 
 #[cfg(not(feature = "cache"))]
-pub(crate) async fn clean_status() -> TardisResult<()> {
-    let mut server_status = SERVER_STATUS.write().await;
+pub(crate) async fn clean_status() -> BoxResult<()> {
+    let mut server_status = server_status().write().await;
     server_status.clear();
 
     Ok(())
