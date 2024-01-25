@@ -20,7 +20,28 @@ path = "src/lib.rs"
 local = ["tardis/fs"]
 cache = ["tardis/cache"]
 ws = ["tardis/ws-client"]
-k8s = ["kube", "k8s-openapi", "k8s-gateway-api", "schemars", "cache"]
+k8s = [
+    "kube",
+    "k8s-openapi",
+    "k8s-gateway-api",
+    "schemars",
+    "cache",
+    "spacegate-plugin/cache",
+    "spacegate-plugin/rewrite",
+    "spacegate-plugin/header-modifier",
+    "spacegate-plugin/redirect",
+]
+plugin-cache = ["spacegate-plugin/cache"]
+plugin-limit = ["spacegate-plugin/limit"]
+plugin-header-modifier = ["spacegate-plugin/header-modifier"]
+plugin-inject = ["spacegate-plugin/inject"]
+plugin-redirect = ["spacegate-plugin/redirect"]
+plugin-retry = ["spacegate-plugin/retry"]
+plugin-rewrite = ["spacegate-plugin/rewrite"]
+plugin-maintenance = ["spacegate-plugin/maintenance"]
+plugin-decompression = ["spacegate-plugin/decompression"]
+plugin-status = ["spacegate-plugin/status"]
+
 
 [dependencies]
 spacegate-tower = { path = "../spacegate-tower" }
@@ -62,7 +83,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [[test]]
 name = "test_config_by_redis"
-required-features = ["cache"]
+required-features = ["cache", "plugin-decompression"]
 
 [[test]]
 name = "test_websocket"

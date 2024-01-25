@@ -1,17 +1,14 @@
 use hyper::header::{HeaderValue, HOST};
-use hyper::{Request, Response, StatusCode, Uri};
+use hyper::{Request, Response};
 use serde::{Deserialize, Serialize};
 use spacegate_tower::extension::Matched;
 use spacegate_tower::helper_layers::filter::{Filter, FilterRequest, FilterRequestLayer};
 use spacegate_tower::layers::gateway::SgGatewayRouter;
 use spacegate_tower::layers::http_route::match_request::{MatchRequest, SgHttpPathMatch};
-use spacegate_tower::layers::http_route::SgHttpRoute;
 use spacegate_tower::{SgBody, SgBoxLayer, SgResponseExt};
-use tardis::basic::{error::TardisError, result::TardisResult};
-use tardis::url::Url;
 
-use crate::{def_plugin, MakeSgLayer};
 use crate::model::SgHttpPathModifier;
+use crate::{def_plugin, MakeSgLayer};
 
 // def_filter!("rewrite", SgFilterRewriteDef, SgFilterRewrite);
 

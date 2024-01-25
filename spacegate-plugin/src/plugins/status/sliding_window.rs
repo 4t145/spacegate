@@ -1,16 +1,14 @@
-#[cfg(feature = "cache")]
-use crate::plugins::context::SgRoutePluginContext;
-#[cfg(feature = "cache")]
-use lazy_static::lazy_static;
 use tardis::basic::{error::TardisError, result::TardisResult};
 #[cfg(feature = "cache")]
 use tardis::cache::Script;
 use tardis::chrono::{DateTime, Duration, Utc};
+#[cfg(feature = "cache")]
+use tardis::tardis_static;
 
 pub(super) const DEFAULT_CONF_WINDOW_KEY: &str = "sg:plugin:filter:window:key";
 
 #[cfg(feature = "cache")]
-lazy_static! {
+tardis_static! {
     /// Sliding window script
     ///
     /// # Arguments
@@ -56,7 +54,7 @@ lazy_static! {
     ///
     /// -- Return the count of requests in the current window.
     /// return current_requests_count
-    static ref SCRIPT: Script = Script::new(
+    pub script: Script = Script::new(
         r"
     local key = KEYS[1]
 
@@ -197,16 +195,16 @@ impl SlidingWindowCounter {
     }
 
     #[cfg(feature = "cache")]
-    pub async fn add_and_count(&self, now: DateTime<Utc>, ctx: &SgRoutePluginContext) -> TardisResult<u64> {
-        let result: &u64 = &SCRIPT
+    pub async fn add_and_count(&self, now: DateTime<Utc>, client: impl AsRef<tardis::cache::cache_client::TardisCacheClient>) -> TardisResult<u64> {
+        let result: u64 = script()
             .key((if self.window_key.is_empty() { DEFAULT_CONF_WINDOW_KEY } else { &self.window_key }).to_string())
             .arg(self.window_size.num_milliseconds())
             .arg(now.timestamp())
             .arg(now.timestamp_subsec_micros())
-            .invoke_async(&mut ctx.cache().await?.cmd().await?)
+            .invoke_async(&mut client.as_ref().cmd().await?)
             .await
             .map_err(|e| TardisError::internal_error(&format!("[SG.Filter.Status] redis error : {e}"), ""))?;
-        Ok(*result)
+        Ok(result)
     }
 
     #[cfg(not(feature = "cache"))]
@@ -241,11 +239,7 @@ impl Slot {
 mod tests {
     use super::*;
     #[cfg(feature = "cache")]
-    use crate::functions::cache_client;
-    #[cfg(feature = "cache")]
-    use http::{HeaderMap, Method, Uri, Version};
-    #[cfg(feature = "cache")]
-    use hyper::Body;
+    use crate::cache::Cache;
     #[cfg(feature = "cache")]
     use tardis::test::test_container::TardisTestContainer;
     #[cfg(feature = "cache")]
@@ -322,52 +316,53 @@ mod tests {
     #[tokio::test]
     #[cfg(feature = "cache")]
     async fn test() {
+        let _init = tardis::basic::tracing::TardisTracingInitializer::default().with_env_layer().with_fmt_layer().init();
         let docker = testcontainers::clients::Cli::default();
         let redis_container = TardisTestContainer::redis_custom(&docker);
         let port = redis_container.get_host_port_ipv4(6379);
         let url = format!("redis://127.0.0.1:{port}/0",);
-        cache_client::init("test_gate1", &url).await.unwrap();
-
-        fn new_ctx() -> SgRoutePluginContext {
-            SgRoutePluginContext::new_http(
-                Method::GET,
-                Uri::from_static("http://sg.idealworld.group/iam/ct/001?name=sg"),
-                Version::HTTP_11,
-                HeaderMap::new(),
-                Body::empty(),
-                "127.0.0.1:8080".parse().unwrap(),
-                "test_gate1".to_string(),
-                None,
-                None,
-            )
-        }
+        Cache::init("test_gate1", &url).await.unwrap();
+        let client = Cache::get("test_gate1").await.unwrap();
+        // fn new_ctx() -> SgRoutePluginContext {
+        //     SgRoutePluginContext::new_http(
+        //         Method::GET,
+        //         Uri::from_static("http://sg.idealworld.group/iam/ct/001?name=sg"),
+        //         Version::HTTP_11,
+        //         HeaderMap::new(),
+        //         Body::empty(),
+        //         "127.0.0.1:8080".parse().unwrap(),
+        //         "test_gate1".to_string(),
+        //         None,
+        //         None,
+        //     )
+        // }
 
         let test = SlidingWindowCounter::new(Duration::seconds(60), "");
 
         assert_eq!(
-            test.add_and_count(DateTime::parse_from_rfc3339("2000-01-01T01:00:50.100Z").unwrap().into(), &new_ctx()).await.unwrap(),
+            test.add_and_count(DateTime::parse_from_rfc3339("2000-01-01T01:00:50.100Z").unwrap().into(), &client).await.unwrap(),
             0
         );
         assert_eq!(
-            test.add_and_count(DateTime::parse_from_rfc3339("2000-01-01T01:00:55.100Z").unwrap().into(), &new_ctx()).await.unwrap(),
+            test.add_and_count(DateTime::parse_from_rfc3339("2000-01-01T01:00:55.100Z").unwrap().into(), &client).await.unwrap(),
             1
         );
 
         assert_eq!(
-            test.add_and_count(DateTime::parse_from_rfc3339("2000-01-01T01:01:50.100Z").unwrap().into(), &new_ctx()).await.unwrap(),
+            test.add_and_count(DateTime::parse_from_rfc3339("2000-01-01T01:01:50.100Z").unwrap().into(), &client).await.unwrap(),
             1
         );
         assert_eq!(
-            test.add_and_count(DateTime::parse_from_rfc3339("2000-01-01T01:01:55.000Z").unwrap().into(), &new_ctx()).await.unwrap(),
+            test.add_and_count(DateTime::parse_from_rfc3339("2000-01-01T01:01:55.000Z").unwrap().into(), &client).await.unwrap(),
             2
         );
         assert_eq!(
-            test.add_and_count(DateTime::parse_from_rfc3339("2000-01-01T01:01:55.100Z").unwrap().into(), &new_ctx()).await.unwrap(),
+            test.add_and_count(DateTime::parse_from_rfc3339("2000-01-01T01:01:55.100Z").unwrap().into(), &client).await.unwrap(),
             2
         );
 
         assert_eq!(
-            test.add_and_count(DateTime::parse_from_rfc3339("2000-01-01T01:05:00.100Z").unwrap().into(), &new_ctx()).await.unwrap(),
+            test.add_and_count(DateTime::parse_from_rfc3339("2000-01-01T01:05:00.100Z").unwrap().into(), &client).await.unwrap(),
             0
         );
     }

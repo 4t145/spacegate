@@ -1,12 +1,10 @@
 use std::convert::Infallible;
 
-use hyper::header::HOST;
 use hyper::{header::UPGRADE, Request, Response, StatusCode};
 use tower::BoxError;
 use tower::ServiceExt;
 use tower_service::Service;
 use tracing::instrument;
-
 
 use crate::service::http_client_service::get_client;
 use crate::utils::x_forwarded_for;
@@ -24,7 +22,7 @@ pub mod ws_client_service;
 ///
 /// This can handle both websocket connection and http request.
 pub async fn http_backend_service_inner(mut req: Request<SgBody>) -> Result<Response<SgBody>, BoxError> {
-    tracing::trace!("start a backend request");
+    tracing::trace!(elapsed = ?req.extensions().get::<crate::extension::EnterTime>().map(crate::extension::EnterTime::elapsed), "start a backend request");
     x_forwarded_for(&mut req)?;
     let mut client = get_client();
     if let Some(upgrade) = req.headers().get(UPGRADE) {
@@ -32,7 +30,7 @@ pub async fn http_backend_service_inner(mut req: Request<SgBody>) -> Result<Resp
         if !upgrade.as_bytes().eq_ignore_ascii_case(b"websocket") {
             return Ok(Response::with_code_message(StatusCode::NOT_IMPLEMENTED, "[Sg.Websocket] unsupported upgrade protocol"));
         }
-        
+
         // dump request
         let (part, body) = req.into_parts();
         let body = body.dump().await?;
@@ -59,12 +57,12 @@ pub async fn http_backend_service_inner(mut req: Request<SgBody>) -> Result<Resp
             ws_client_service::service(upgrade_as_server, upgrade_as_client).await?;
             <Result<(), BoxError>>::Ok(())
         });
-        tracing::trace!("finish backend websocket forward");
+        tracing::trace!(elapsed = ?resp.extensions().get::<crate::extension::EnterTime>().map(crate::extension::EnterTime::elapsed), "finish backend websocket forward");
         // return response to client
         Ok(resp)
     } else {
         let resp = client.request(req).await;
-        tracing::trace!("finish backend request");
+        tracing::trace!(elapsed = ?resp.extensions().get::<crate::extension::EnterTime>().map(crate::extension::EnterTime::elapsed), "finish backend request");
         Ok(resp)
     }
 }

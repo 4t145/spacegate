@@ -3,31 +3,19 @@ pub mod builder;
 use std::{
     convert::Infallible,
     ops::{Index, IndexMut},
-    str::FromStr,
     sync::Arc,
-    time::Duration,
 };
 
 use crate::{
-    extension::Matched,
     helper_layers::{
-        filter::{response_anyway::ResponseAnyway, FilterRequest, FilterRequestLayer},
         reload::Reloader,
         route::{Route, Router},
     },
-    utils::fold_sg_layers::fold_sg_layers,
     SgBody, SgBoxLayer, SgBoxService,
 };
 
-use http_serde::authority;
-use hyper::{
-    header::{HeaderValue, HOST},
-    Request, Response,
-};
+use hyper::{header::HOST, Request, Response};
 use tokio_util::sync::CancellationToken;
-use tower::steer::Steer;
-
-use tower_http::timeout::{Timeout, TimeoutLayer};
 
 use tower_layer::Layer;
 use tower_service::Service;
@@ -55,7 +43,7 @@ impl SgGatewayLayer {
     /// # Arguments
     /// * `gateway_name` - The gateway name, this may be used by plugins.
     /// * `cancel_token` - A cancel token hints wether the gateway server is still alive.
-    /// 
+    ///
     pub fn builder(gateway_name: impl Into<Arc<str>>, cancel_token: CancellationToken) -> builder::SgGatewayLayerBuilder {
         builder::SgGatewayLayerBuilder::new(gateway_name, cancel_token)
     }
@@ -83,29 +71,6 @@ impl Index<(usize, usize)> for SgGatewayRoutedServices {
 impl IndexMut<(usize, usize)> for SgGatewayRoutedServices {
     fn index_mut(&mut self, index: (usize, usize)) -> &mut Self::Output {
         &mut self.services[index.0][index.1]
-    }
-}
-
-// header: example.com:80 matches example.com
-// header: example.com matches example.com
-fn match_host(header: &[u8], matcher: &[u8]) -> bool {
-    if header.len() < matcher.len() {
-        return false;
-    }
-    let mut h_iter = header.iter();
-    let mut m_iter = header.iter();
-    loop {
-        match (h_iter.next(), m_iter.next()) {
-            (Some(h), Some(m)) => {
-                if !h.eq_ignore_ascii_case(m) {
-                    return false;
-                }
-            }
-            (None, None) | (Some(b':'), None) => {
-                return true;
-            }
-            _ => return false,
-        }
     }
 }
 
@@ -172,8 +137,12 @@ where
             rules_router.push(rule.r#match.clone());
         }
         let idx = services.len();
-        for hostname in route.hostnames.iter() {
-            hostname_tree.set(hostname, idx);
+        if route.hostnames.is_empty() {
+            hostname_tree.set("*", idx);
+        } else {
+            for hostname in route.hostnames.iter() {
+                hostname_tree.set(hostname, idx);
+            }
         }
         services.push(rules_services);
         routers.push(SgHttpRouter {

@@ -1,26 +1,15 @@
-use std::{
-    future::{ready, Ready},
-    str::FromStr,
-};
-
-use hyper::{Request, Response, StatusCode, Uri};
+use hyper::{Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use spacegate_tower::{helper_layers::filter::FilterRequest, SgResponseExt};
 use spacegate_tower::{
     helper_layers::filter::{Filter, FilterRequestLayer},
     SgBoxLayer,
 };
-use tardis::{
-    basic::{error::TardisError, result::TardisResult},
-    url::Url,
-};
-use tower_layer::Layer;
+use tardis::url::Url;
 
-use spacegate_tower::{SgBody, SgBoxService};
+use spacegate_tower::SgBody;
 
-use crate::{def_plugin, model::{SgHttpPathModifier,}, MakeSgLayer};
-
-
+use crate::{def_plugin, model::SgHttpPathModifier, MakeSgLayer};
 
 /// RedirectFilter defines a filter that redirects a request.
 ///

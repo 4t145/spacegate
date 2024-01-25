@@ -1,8 +1,6 @@
-use crate::{
-    config::{
-        gateway_dto::{SgListener, SgProtocol},
-        http_route_dto::{SgHttpHeaderMatchType, SgHttpPathMatchType, SgHttpQueryMatchType},
-    },
+use crate::config::{
+    gateway_dto::{SgListener, SgProtocol},
+    http_route_dto::{SgHttpHeaderMatchType, SgHttpPathMatchType, SgHttpQueryMatchType},
 };
 
 use http::Method;

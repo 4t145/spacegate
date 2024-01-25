@@ -59,6 +59,7 @@ impl SgFilterInject {
             let mut new_req_headers = resp_part.headers;
             let new_req_method =
                 new_req_headers.remove(HeaderName::from_static(SG_INJECT_REAL_METHOD)).map(|m| Method::from_bytes(m.as_bytes())).transpose()?.unwrap_or(real_parts.method);
+            #[allow(clippy::unnecessary_to_owned)]
             let new_req_url =
                 new_req_headers.remove(HeaderName::from_static(SG_INJECT_REAL_URL)).map(|m| Uri::from_maybe_shared(m.to_owned())).transpose()?.unwrap_or(real_parts.uri);
             let mut new_request = Request::builder().method(new_req_method).uri(new_req_url).version(real_parts.version).body(resp_body)?;

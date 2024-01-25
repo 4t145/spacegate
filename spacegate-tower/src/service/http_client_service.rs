@@ -1,19 +1,13 @@
-use crate::{
-    extension::Reflect,
-    helper_layers::response_error::{DefaultErrorFormatter, ResponseError, ResponseErrorFuture},
-    SgBody, SgRequestExt, SgResponseExt,
-};
-use futures_util::{Future, FutureExt, TryFutureExt};
-use http_body_util::combinators::BoxBody;
-use hyper::{body::Incoming, Request, Response};
-use hyper::{
-    body::{Body, Bytes},
-    StatusCode,
-};
+use crate::extension::EnterTime;
+use crate::{extension::Reflect, SgBody, SgResponseExt};
+use futures_util::{Future, FutureExt};
+
+use hyper::StatusCode;
+use hyper::{Request, Response};
 use hyper_rustls::HttpsConnector;
 use hyper_rustls::{ConfigBuilderExt, HttpsConnectorBuilder};
 use hyper_util::{
-    client::legacy::{connect::HttpConnector, Builder, Client},
+    client::legacy::{connect::HttpConnector, Client},
     rt::TokioExecutor,
 };
 use std::{
@@ -26,7 +20,6 @@ use std::{
 };
 use tokio_rustls::rustls::{self, client::danger::ServerCertVerifier, SignatureScheme};
 use tower_service::Service;
-use tracing::instrument;
 
 #[derive(Debug, Clone)]
 pub struct NoCertificateVerification {}

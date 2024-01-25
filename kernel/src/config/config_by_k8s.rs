@@ -422,7 +422,7 @@ async fn overload_gateway(gateway_obj: Gateway, http_route_api_refs: (&Api<HttpS
             let gateway_config = process_gateway_config(vec![gateway_obj])
                 .await
                 .expect("[SG.Config] Failed to process gateway config")
-                .get(0)
+                .first()
                 .expect("[SG.Config] Gateway config not found")
                 .clone();
 
@@ -511,7 +511,7 @@ async fn overload_http_route(gateway_obj: Gateway, http_route_api_refs: (&Api<Ht
     let gateway_config = process_gateway_config(vec![gateway_obj])
         .await
         .expect("[SG.Config] Failed to process gateway config for http_route parent ref")
-        .get(0)
+        .first()
         .expect("[SG.Config] Gateway config not found for http_route parent ref")
         .clone();
 
@@ -629,7 +629,7 @@ async fn process_gateway_config(gateway_objs: Vec<Gateway>) -> TardisResult<Vec<
                                     .certificate_refs
                                     .as_ref()
                                     .ok_or_else(|| TardisError::format_error("[SG.Config] Gateway [spec.listener.tls.certificateRefs] is required", ""))?
-                                    .get(0)
+                                    .first()
                                     .ok_or_else(|| TardisError::format_error("[SG.Config] Gateway [spec.listener.tls.certificateRefs] is empty", ""))?;
                                 let secret_api: Api<Secret> = if let Some(namespace) = &certificate_ref.namespace {
                                     Api::namespaced(get_client().await?, namespace)

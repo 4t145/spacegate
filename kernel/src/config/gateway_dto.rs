@@ -1,4 +1,4 @@
-use std::{fmt::Display, str::FromStr, net::IpAddr};
+use std::{fmt::Display, net::IpAddr, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 use tardis::basic::error::TardisError;

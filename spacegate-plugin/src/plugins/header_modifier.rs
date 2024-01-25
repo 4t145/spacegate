@@ -36,7 +36,7 @@ impl MakeSgLayer for SgFilterHeaderModifier {
         let mut remove = Vec::new();
         if let Some(r) = &self.remove {
             for k in r {
-                remove.push(k.parse().unwrap());
+                remove.push(k.parse()?);
             }
         }
         let filter = Filter { sets, remove };

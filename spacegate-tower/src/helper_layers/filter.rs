@@ -11,8 +11,6 @@ pub trait Filter: Clone {
     fn filter(&self, req: Request<SgBody>) -> Result<Request<SgBody>, Response<SgBody>>;
 }
 
-
-
 #[derive(Debug, Clone)]
 
 pub struct FilterRequestLayer<F> {

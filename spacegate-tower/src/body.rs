@@ -4,9 +4,7 @@ use tower::BoxError;
 
 use crate::utils::never;
 
-pub mod compress;
-pub mod decompress;
-pub mod dump;
+// pub mod dump;
 
 #[derive(Debug)]
 pub struct SgBody {
@@ -40,8 +38,7 @@ impl SgBody {
             dump: None,
         }
     }
-    pub fn new_boxed_error(body: impl Body<Data = Bytes, Error = BoxError> + Send + Sync + 'static) -> Self
-    {
+    pub fn new_boxed_error(body: impl Body<Data = Bytes, Error = BoxError> + Send + Sync + 'static) -> Self {
         Self {
             body: BoxBody::new(body),
             dump: None,

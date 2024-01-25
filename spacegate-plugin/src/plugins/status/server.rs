@@ -1,10 +1,9 @@
 use std::{net::IpAddr, str::FromStr, sync::Arc, time::Duration};
 
 use super::{status_plugin, SgFilterStatusConfig};
-use http_body_util::Full;
-use hyper::{body::Incoming, service::service_fn, Request, Response};
+use hyper::{body::Incoming, service::service_fn, Request};
 use hyper_util::rt::{TokioExecutor, TokioIo};
-use tardis::tokio::{self, sync::Mutex, task::yield_now};
+use tardis::tokio::{self};
 use tokio_util::sync::CancellationToken;
 use tower::BoxError;
 use tracing::instrument;
@@ -18,7 +17,7 @@ pub async fn launch_status_server(config: &SgFilterStatusConfig, gateway_name: A
         match tokio::net::TcpListener::bind((host, port)).await {
             Ok(listener) => break listener,
             Err(e) => {
-                if std::io::ErrorKind::AddrInUse == e.kind() && bind_fail_instant.elapsed().is_zero() {                    
+                if std::io::ErrorKind::AddrInUse == e.kind() && bind_fail_instant.elapsed().is_zero() {
                     tokio::task::yield_now().await;
                     continue;
                 } else {
@@ -65,6 +64,6 @@ pub async fn launch_status_server(config: &SgFilterStatusConfig, gateway_name: A
             }
         });
     }
-
+    status_plugin::clean_status(&cache_key, &gateway_name).await?;
     Ok(())
 }

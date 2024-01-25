@@ -17,7 +17,7 @@ impl<P> StatusLayer<P> {
 
 pub trait Policy {
     fn on_request(&self, req: &Request<SgBody>);
-    fn on_response(&self, res: &Response<SgBody>);
+    fn on_response(&self, resp: &Response<SgBody>);
 }
 
 #[derive(Debug, Clone)]

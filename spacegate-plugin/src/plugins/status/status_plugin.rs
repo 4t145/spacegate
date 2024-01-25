@@ -1,18 +1,15 @@
+#![allow(unused_assignments)]
 use http_body_util::Full;
 use hyper::{Request, Response};
 use serde::{Deserialize, Serialize};
-use spacegate_tower::SgBody;
-use tower::BoxError;
 use std::sync::Arc;
+use tower::BoxError;
 
-use tardis::{tokio::sync::Mutex};
 type BoxResult<T> = Result<T, BoxError>;
-#[cfg(feature = "cache")]
-use crate::functions::{self, cache_client};
-#[cfg(not(feature = "cache"))]
-use tardis::tardis_static;
 #[cfg(not(feature = "cache"))]
 use std::collections::HashMap;
+#[cfg(not(feature = "cache"))]
+use tardis::tardis_static;
 #[cfg(not(feature = "cache"))]
 use tardis::tokio::sync::RwLock;
 #[cfg(feature = "cache")]
@@ -47,10 +44,10 @@ pub(crate) async fn create_status_html<B>(
     _cache_key: Arc<str>,
     title: Arc<str>,
 ) -> Result<Response<Full<hyper::body::Bytes>>, hyper::Error> {
-    let keys;
+    let mut keys = Vec::<String>::new();
     #[cfg(feature = "cache")]
     {
-        let cache_client = functions::cache_client::get(_gateway_name.as_ref()).await.expect("get cache client error!");
+        let cache_client = crate::cache::Cache::get(_gateway_name.as_ref()).await.expect("get cache client error!");
         keys = cache_client.hkeys(_cache_key.as_ref()).await.expect("get cache keys error!");
     }
     #[cfg(not(feature = "cache"))]
@@ -59,12 +56,12 @@ pub(crate) async fn create_status_html<B>(
         keys = status.keys().cloned().collect::<Vec<String>>();
     }
     let mut service_html = "".to_string();
-    for key in keys {
+    for ref key in keys {
         let status;
         #[cfg(feature = "cache")]
         {
-            let cache_client = functions::cache_client::get(_gateway_name.as_ref()).await.expect("get cache client error!");
-            status = get_status(&key, _cache_key.as_ref(), &cache_client).await.expect("");
+            let cache_client = crate::cache::Cache::get(_gateway_name.as_ref()).await.expect("get cache client error!");
+            status = get_status(key, _cache_key.as_ref(), &cache_client).await.expect("");
         }
         #[cfg(not(feature = "cache"))]
         {
@@ -116,13 +113,13 @@ pub(crate) async fn get_status(server_name: &str) -> BoxResult<Option<Status>> {
 
 #[cfg(feature = "cache")]
 pub(crate) async fn clean_status(cache_key: &str, gateway_name: &str) -> BoxResult<()> {
-    let client = cache_client::get(gateway_name).await?;
+    let client = crate::cache::Cache::get(gateway_name).await?;
     client.as_ref().del(cache_key).await?;
     Ok(())
 }
 
 #[cfg(not(feature = "cache"))]
-pub(crate) async fn clean_status() -> BoxResult<()> {
+pub(crate) async fn clean_status(cache_key: &str, gateway_name: &str) -> BoxResult<()> {
     let mut server_status = server_status().write().await;
     server_status.clear();
 

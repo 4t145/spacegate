@@ -1,15 +1,8 @@
-use futures_util::{future::BoxFuture, Future};
-use hyper::{body::Incoming, rt::Executor, Request, Response};
-use hyper_util::rt::{self, TokioExecutor, TokioIo};
-use rustls::pki_types::PrivateKeyDer;
-use serde::{Deserialize, Serialize};
-use std::{
-    convert::Infallible,
-    fmt::Display,
-    net::{IpAddr, SocketAddr},
-    str::FromStr,
-    sync::Arc,
-};
+use futures_util::future::BoxFuture;
+use hyper::{body::Incoming, Request, Response};
+use hyper_util::rt::{self, TokioIo};
+
+use std::{convert::Infallible, net::SocketAddr, sync::Arc};
 use tokio::net::TcpStream;
 use tokio_rustls::rustls;
 use tokio_util::sync::CancellationToken;
@@ -17,7 +10,7 @@ use tower::{BoxError, ServiceExt};
 use tracing::instrument;
 
 use crate::{
-    extension::{PeerAddr, Reflect},
+    extension::{EnterTime, PeerAddr, Reflect},
     utils::with_length_or_chunked,
     SgBody,
 };
@@ -77,13 +70,24 @@ where
     #[inline]
     fn call(&self, mut req: Request<Incoming>) -> Self::Future {
         req.extensions_mut().insert(self.peer);
+        // here we will clone underlying service,
+        // so it's important that underlying service is cheap to clone.
+        // here, the service are likely to be a `SgBoxService`, if underlying service is big, it will be expensive to clone.
+        // especially the router is big and the too many plugins are installed.
+        // so we should avoid that
+        let enter_time = EnterTime::new();
         let this = self.service.clone();
+        tracing::trace!(time_used = ?enter_time.elapsed(), "underlying service cloned");
         let mut req = req.map(SgBody::new);
+        let mut reflect = Reflect::default();
+        reflect.insert(enter_time);
         req.extensions_mut().insert(Reflect::default());
         req.extensions_mut().insert(PeerAddr(self.peer));
+        req.extensions_mut().insert(enter_time);
         Box::pin(async move {
             let mut resp = this.ready_oneshot().await?.call(req).await?;
             with_length_or_chunked(&mut resp);
+            tracing::trace!(time_used = ?enter_time.elapsed(), "finished");
             Ok(resp)
         })
     }

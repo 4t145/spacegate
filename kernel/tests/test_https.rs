@@ -8,11 +8,10 @@ use spacegate_kernel::config::{
 use spacegate_tower::BoxError;
 use tardis::{
     basic::{
-        result::TardisResult,
-        tracing::{TardisTracing, TardisTracingInitializer},
+        tracing::{TardisTracingInitializer},
     },
     config::config_dto::WebClientModuleConfig,
-    tokio::{self, io::AsyncReadExt, time::sleep},
+    tokio::{self, time::sleep},
     web::web_client::{TardisHttpResponse, TardisWebClient},
 };
 
@@ -103,7 +102,7 @@ W0X+/YToWPeWivw3Kbo05oCob0NUi3fXtiTHng==
 #[tokio::test]
 async fn test_https() -> Result<(), BoxError> {
     env::set_var("RUST_LOG", "info,spacegate_kernel=trace,spacegate_tower=trace,tower_service=trace,rust_tls=trace");
-    let tracing = TardisTracingInitializer::default().with_fmt_layer().with_env_layer().init();
+    let _tracing = TardisTracingInitializer::default().with_fmt_layer().with_env_layer().init();
     spacegate_kernel::do_startup(
         SgGateway {
             name: "test_gw".to_string(),

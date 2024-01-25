@@ -1,13 +1,9 @@
-use std::{collections::VecDeque, pin::pin, sync::Arc, task::ready};
+use std::sync::Arc;
 
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::Mutex;
 use tower_layer::Layer;
 
-use crate::SgBody;
-use futures_util::{Future, FutureExt};
-use hyper::Request;
-use pin_project_lite::pin_project;
-use tower::{Service, ServiceExt};
+use tower::Service;
 
 #[derive(Default, Debug, Clone)]
 pub struct ReloadLayer<S> {

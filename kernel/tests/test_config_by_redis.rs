@@ -8,7 +8,10 @@ use tardis::{
     cache::cache_client::TardisCacheClient,
     config::config_dto::{CacheModuleConfig, WebClientModuleConfig},
     testcontainers,
-    tokio::{self, time::{sleep, timeout}},
+    tokio::{
+        self,
+        time::{sleep, timeout},
+    },
     web::web_client::TardisWebClient,
 };
 

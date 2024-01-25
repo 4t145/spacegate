@@ -1,7 +1,7 @@
 use std::convert::Infallible;
 
 use hyper::{Request, Response};
-use tokio_tungstenite::tungstenite::http::Extensions;
+
 use tracing::instrument;
 
 use crate::{extension::Reflect, SgBody, SgResponseExt};
@@ -17,4 +17,3 @@ pub async fn echo(mut req: Request<SgBody>) -> Result<Response<SgBody>, Infallib
     }
     Ok(resp)
 }
-

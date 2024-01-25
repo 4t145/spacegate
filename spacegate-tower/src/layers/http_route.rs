@@ -3,28 +3,14 @@ pub mod match_hostname;
 pub mod match_request;
 mod picker;
 mod predicate;
-use std::{
-    convert::Infallible,
-    num::NonZeroU16,
-    ops::{Index, IndexMut},
-    sync::Arc,
-    time::Duration,
-};
+use std::{convert::Infallible, num::NonZeroU16, sync::Arc, time::Duration};
 
 use crate::{
     extension::{BackendHost, Reflect},
-    helper_layers::{
-        filter::{FilterRequest, FilterRequestLayer},
-        route::{Route, Router},
-    },
-    utils::{
-        fold_sg_layers::fold_sg_layers,
-        schema_port::{port_to_schema, schema_to_port},
-    },
+    utils::schema_port::port_to_schema,
     SgBody, SgBoxLayer, SgBoxService,
 };
 
-use http_serde::authority;
 use hyper::{Request, Response};
 use tower::steer::Steer;
 
@@ -35,9 +21,8 @@ use tower_service::Service;
 
 use self::{
     builder::{SgHttpBackendLayerBuilder, SgHttpRouteLayerBuilder, SgHttpRouteRuleLayerBuilder},
-    match_request::{MatchRequest, SgHttpRouteMatch},
-    picker::{RouteByMatches, RouteByWeight},
-    predicate::FilterByHostnames,
+    match_request::SgHttpRouteMatch,
+    picker::RouteByWeight,
 };
 
 /****************************************************************************************
@@ -120,6 +105,7 @@ impl Service<Request<SgBody>> for SgRouteRule {
     }
 
     fn call(&mut self, req: Request<SgBody>) -> Self::Future {
+        tracing::trace!(elapsed = ?req.extensions().get::<crate::extension::EnterTime>().map(crate::extension::EnterTime::elapsed), "enter route rule");
         self.service.call(req)
     }
 }
@@ -217,6 +203,7 @@ where
     type Future = <SgBoxService as Service<Request<SgBody>>>::Future;
 
     fn call(&mut self, req: Request<SgBody>) -> Self::Future {
+        tracing::trace!(elapsed = ?req.extensions().get::<crate::extension::EnterTime>().map(crate::extension::EnterTime::elapsed), "enter backend");
         Box::pin(self.inner_service.call(req))
     }
 

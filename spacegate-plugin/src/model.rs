@@ -23,7 +23,7 @@ impl SgHttpPathModifier {
     pub fn replace(&self, path: &str, prefix_match: Option<&str>) -> Option<String> {
         let value = &self.value;
         match self.kind {
-            SgHttpPathModifierType::ReplaceFullPath  => {
+            SgHttpPathModifierType::ReplaceFullPath => {
                 if value.eq_ignore_ascii_case(path) {
                     Some(value.clone())
                 } else {
@@ -34,7 +34,7 @@ impl SgHttpPathModifier {
                 let prefix_match = prefix_match?;
                 let mut path_segments = path.split('/').filter(|s| !s.is_empty());
                 let mut prefix_segments = prefix_match.split('/').filter(|s| !s.is_empty());
-                let mut new_path = vec!("");
+                let mut new_path = vec![""];
                 loop {
                     match (path_segments.next(), prefix_segments.next()) {
                         (Some(path_seg), Some(prefix_seg)) => {
@@ -50,7 +50,7 @@ impl SgHttpPathModifier {
                         }
                         (None, Some(_)) => return None,
                     }
-                };
+                }
             }
         }
     }

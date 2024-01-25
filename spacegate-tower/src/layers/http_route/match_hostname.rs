@@ -24,12 +24,10 @@
 //! ```
 
 use std::{
-    collections::{BTreeMap, BTreeSet},
-    fmt::{self, Display},
+    collections::BTreeMap,
+    fmt::{self},
     net::{Ipv4Addr, Ipv6Addr},
 };
-
-use hyper::body::Bytes;
 
 #[derive(Debug, Clone)]
 pub struct HostnameTree<T> {

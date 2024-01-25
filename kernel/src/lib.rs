@@ -21,15 +21,19 @@
 
 #![warn(clippy::unwrap_used)]
 use config::{gateway_dto::SgGateway, http_route_dto::SgHttpRoute};
-use functions::server;
 pub use http;
 pub use hyper;
 pub use spacegate_plugin;
 pub use spacegate_tower::{self, helper_layers, BoxError, SgBody, SgBoxLayer, SgBoxService, SgRequestExt, SgResponseExt};
-use tardis::{basic::result::TardisResult, log::{self as tracing, instrument}, tokio::signal};
+use tardis::{
+    basic::result::TardisResult,
+    log::{self as tracing, instrument},
+    tokio::signal,
+};
 pub mod config;
 pub mod constants;
-pub mod functions;
+pub mod server;
+mod cache_client;
 pub mod helpers;
 // pub mod instance;
 // pub mod plugins;
@@ -58,7 +62,7 @@ pub async fn startup(k8s_mode: bool, namespace_or_conf_uri: Option<String>, chec
     Ok(())
 }
 
-#[instrument]
+#[instrument(skip(gateway))]
 pub async fn do_startup(gateway: SgGateway, http_routes: Vec<SgHttpRoute>) -> Result<(), BoxError> {
     let gateway_name = gateway.name.clone();
     #[cfg(feature = "cache")]
@@ -66,7 +70,7 @@ pub async fn do_startup(gateway: SgGateway, http_routes: Vec<SgHttpRoute>) -> Re
         // Initialize cache instances
         if let Some(url) = &gateway.parameters.redis_url {
             tracing::trace!("Initialize cache client...url:{url}");
-            functions::cache_client::init(gateway_name.clone(), url).await?;
+            cache_client::init(gateway_name.clone(), url).await?;
         }
     }
     // Initialize service instances
@@ -87,7 +91,7 @@ pub async fn shutdown(gateway_name: &str) -> Result<(), BoxError> {
     #[cfg(feature = "cache")]
     {
         // Remove cache instances
-        functions::cache_client::remove(gateway_name).await?;
+        cache_client::remove(gateway_name).await?;
     }
     // Shutdown service instances
     if let Some(gateway) = server::RunningSgGateway::global_remove(gateway_name) {

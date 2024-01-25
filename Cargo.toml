@@ -42,6 +42,17 @@ tardis = { version = "=0.1.0-rc.8" }
 http = { version = "0.2" }
 rustls = { version = "0.21.0" }
 hyper = { version = "1", features = ["full"] }
+http-body-util = { version = "0" }
+hyper-util = { version = "0"}
+
+# ws
+tokio-tungstenite = { version = "0" }
+
+# tower
+tower-service = { version = "0.3" }
+tower-layer = { version = "0.3" }
+tower-http = { version = "0.5" }
+tower = { version = "0.4" }
 
 # K8s
 kube = { version = "0.85", features = ["runtime", "derive"] }
@@ -65,11 +76,20 @@ bytes = { version = "1" }
 
 # Tls
 hyper-rustls = { version = "0.26" }
-rustls-pemfile = "2.0.0" 
-tokio-rustls = { version = "0.25.0", default-features = false}
+rustls-pemfile = "2"
+tokio-rustls = { version = "0.25" }
 
 # serde
 duration-str = "0.7.1"
 
 # regex
 regex = { version = "1" }
+
+# futures
+pin-project-lite = { version = "0.2" }
+tokio-util = { version = "0.7.8", features = ["io"] }
+futures-util = { version = "0" }
+
+# utils
+ipnet = { version = "2" }
+

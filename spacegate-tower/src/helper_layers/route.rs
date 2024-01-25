@@ -1,13 +1,9 @@
-use std::{
-    collections::VecDeque,
-    convert::Infallible,
-    ops::{Index, IndexMut},
-};
+use std::{collections::VecDeque, convert::Infallible, ops::IndexMut};
 
 use futures_util::future::BoxFuture;
 pub use hyper::http::request::Parts;
 use hyper::{Request, Response};
-use tower::BoxError;
+
 use tower_service::Service;
 
 use crate::{extension::Matched, SgBody};

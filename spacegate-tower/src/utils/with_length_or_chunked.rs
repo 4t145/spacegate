@@ -1,6 +1,6 @@
 use crate::SgBody;
 use hyper::{header::HeaderValue, Response};
-use http_body_util::Full;
+
 pub fn with_length_or_chunked(resp: &mut Response<SgBody>) {
     if let Some(len) = resp.body().get_dumped().map(hyper::body::Bytes::len) {
         resp.headers_mut().insert(

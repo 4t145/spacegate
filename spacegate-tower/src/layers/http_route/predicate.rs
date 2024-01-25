@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use hyper::{Response, StatusCode, Request};
+use hyper::{Request, Response, StatusCode};
 
-use crate::SgResponseExt;
 use crate::helper_layers::filter;
-use crate::{ReqOrResp, SgBody,};
+use crate::SgResponseExt;
+use crate::{ReqOrResp, SgBody};
 
 #[derive(Debug, Clone)]
 pub struct FilterByHostnames {
@@ -24,7 +24,7 @@ impl FilterByHostnames {
                     Err(Response::<SgBody>::with_code_message(StatusCode::FORBIDDEN, "hostname not allowed"))
                 }
             } else {
-                Err(Response::<SgBody>::with_code_message( StatusCode::FORBIDDEN, "missing hostname"))
+                Err(Response::<SgBody>::with_code_message(StatusCode::FORBIDDEN, "missing hostname"))
             }
         }
     }
@@ -35,5 +35,3 @@ impl filter::Filter for FilterByHostnames {
         FilterByHostnames::check(self, req)
     }
 }
-
-

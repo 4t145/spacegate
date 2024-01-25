@@ -1,23 +1,16 @@
-use std::{
-    convert::Infallible,
-    future::{ready, Future, Ready},
-    pin::Pin,
-    sync::Arc,
-    time::SystemTime,
-};
+use std::{future::Future, pin::Pin, sync::Arc, time::SystemTime};
 
 use hyper::{Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use tardis::{cache::Script, tardis_static};
-use tower::util::BoxLayer;
-use tower_layer::Stack;
 
 use spacegate_tower::{
+    extension::GatewayName,
     helper_layers::async_filter::{AsyncFilter, AsyncFilterRequest, AsyncFilterRequestLayer},
-    SgBody, SgBoxLayer, SgResponseExt, extension::{Reflect, GatewayName},
+    SgBody, SgBoxLayer, SgResponseExt,
 };
 
-use crate::{def_plugin, cache::Cache, MakeSgLayer};
+use crate::{cache::Cache, def_plugin, MakeSgLayer};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RateLimitConfig {

@@ -6,7 +6,8 @@ use std::{
     convert::Infallible,
     future::Future,
     pin::Pin,
-    task::{Context, Poll}, sync::Arc,
+    sync::Arc,
+    task::{Context, Poll},
 };
 pub use tower::util::{MapFuture, MapRequest, MapResponse};
 use tower_layer::Layer;

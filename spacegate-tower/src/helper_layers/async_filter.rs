@@ -1,8 +1,7 @@
-
 pub mod dump;
-use std::{convert::Infallible, pin::Pin, task::ready};
+use std::{convert::Infallible, task::ready};
 
-use futures_util::{Future, FutureExt, TryFutureExt};
+use futures_util::Future;
 use hyper::{Request, Response};
 use pin_project_lite::pin_project;
 use tower_layer::Layer;
@@ -122,9 +121,7 @@ where
         // filter the request
 
         FilterResponseFuture {
-            state: FilterResponseFutureState::Filter {
-                fut: filter.filter(req),
-            },
+            state: FilterResponseFutureState::Filter { fut: filter.filter(req) },
             inner_service: inner,
         }
     }

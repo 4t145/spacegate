@@ -1,50 +1,33 @@
-use std::{
-    collections::HashMap,
-    convert::Infallible,
-    future::Future,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
-    sync::Mutex,
-};
+use std::{collections::HashMap, net::SocketAddr, sync::Mutex};
 
 use crate::config::{
     gateway_dto::{SgGateway, SgProtocol, SgTlsMode},
     http_route_dto::SgHttpRoute,
     plugin_filter_dto::SgRouteFilter,
 };
-use core::task::{Context, Poll};
-use http::{HeaderValue, Request, Response, StatusCode};
 
 use lazy_static::lazy_static;
-use serde_json::json;
 use spacegate_tower::{
     helper_layers::reload::Reloader,
-    layers::gateway::{builder::default_gateway_route_fallback, create_http_router, SgGatewayLayer, SgGatewayRoute},
+    layers::gateway::{builder::default_gateway_route_fallback, create_http_router, SgGatewayRoute},
     listener::SgListen,
-    service::{get_http_backend_service, http_backend_service},
-    BoxError, Layer, Service, SgBoxService,
+    service::get_http_backend_service,
+    BoxError, Layer, SgBoxService,
 };
-use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 use std::vec::Vec;
-use std::{io, sync};
+use tardis::log::{instrument, warn};
+use tardis::{config::config_dto::LogConfig, consts::IP_UNSPECIFIED};
 use tardis::{
-    basic::{error::TardisError, result::TardisResult},
-    futures_util::future::join_all,
     log::{self as tracing, debug, info},
     log::{self, error},
     tokio::{self, sync::watch::Sender, task::JoinHandle},
     TardisFuns,
 };
-use tardis::{config::config_dto::LogConfig, consts::IP_UNSPECIFIED};
-use tardis::{
-    futures_util::{ready, FutureExt},
-    log::{instrument, warn},
-};
 use tardis::{tardis_static, tokio::time::timeout};
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use tokio_rustls::rustls::{self, pki_types::PrivateKeyDer, ServerConfig};
-use tokio_util::sync::{CancellationToken, WaitForCancellationFutureOwned};
+use tokio_rustls::rustls::{self, pki_types::PrivateKeyDer};
+use tokio_util::sync::CancellationToken;
 
 lazy_static! {
     static ref SHUTDOWN_TX: Arc<Mutex<HashMap<String, Sender<()>>>> = <_>::default();
@@ -132,7 +115,7 @@ pub(crate) fn create_router_service(http_routes: Vec<crate::SgHttpRoute>) -> Res
 /// It's created by calling [start](RunningSgGateway::start).
 ///
 /// And you can use [shutdown](RunningSgGateway::shutdown) to shutdown it manually.
-/// 
+///
 /// Though, after it has been dropped, it will shutdown automatically.
 pub struct RunningSgGateway {
     token: CancellationToken,

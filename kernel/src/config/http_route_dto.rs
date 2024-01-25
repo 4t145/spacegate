@@ -1,5 +1,3 @@
-use std::fmt;
-
 use serde::{Deserialize, Serialize};
 pub use spacegate_tower::layers::http_route::match_request::*;
 

@@ -4,7 +4,6 @@ use ipnet::IpNet;
 use spacegate_tower::extension::PeerAddr;
 use spacegate_tower::helper_layers::filter::{Filter, FilterRequestLayer};
 use spacegate_tower::{SgBody, SgBoxLayer, SgResponseExt};
-use std::iter;
 use std::net::IpAddr;
 use std::ops::Range;
 use tower::BoxError;
@@ -12,7 +11,6 @@ use tower::BoxError;
 // use crate::def_filter;
 // use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use tardis::basic::{error::TardisError, result::TardisResult};
 use tardis::chrono::{Local, NaiveTime};
 
 // use crate::plugins::context::SgRouteFilterRequestAction;
@@ -200,11 +198,9 @@ def_plugin!("maintenance", MaintenancePlugin, SgFilterMaintenanceConfig);
 
 #[cfg(test)]
 mod test {
-    use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4};
-    use std::str::FromStr;
 
     use hyper::StatusCode;
-    use hyper::{http::Extensions, Method, Request, Version};
+    use hyper::{Method, Request, Version};
     use serde_json::json;
     use spacegate_tower::extension::PeerAddr;
     use spacegate_tower::service::get_echo_service;
@@ -246,7 +242,6 @@ mod test {
             .expect("unable to create plugin");
         let mut serivce = repo.layer(get_echo_service());
 
-        
         let req = Request::builder()
             .method(Method::POST)
             .uri("http://sg.idealworld.group")
@@ -277,5 +272,5 @@ mod test {
         let resp = serivce.ready().await.unwrap().call(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
         Ok(())
-    }   
+    }
 }

@@ -16,35 +16,57 @@ readme = "../README.md"
 name = "spacegate_plugin"
 path = "src/lib.rs"
 
+[features]
+cache = ["tardis/cache"]
+limit = ["cache"]
+header-modifier = []
+inject = []
+redirect = []
+retry = ["tower/retry"]
+rewrite = []
+maintenance = ["ipnet"]
+decompression = ["tower-http/decompression-full"]
+status = ["hyper-util"]
+full = [
+    "cache",
+    "limit",
+    "header-modifier",
+    "inject",
+    "redirect",
+    "retry",
+    "rewrite",
+    "maintenance",
+    "decompression",
+    "status",
+]
 [dependencies]
 spacegate-tower = { path = "../spacegate-tower" }
 tracing = { workspace = true }
-hyper = { version = "1" }
-http-body-util = { version = "0" }
-tower-service = { version = "0.3.2" }
-tower-layer = { version = "0.3.2" }
-rustls = { version = "0.22" }
-tower = { version = "0.4.13", features = ["full"] }
-tower-http = { version = "0.5", features = ["full"] }
-pin-project-lite = { version = "0.2.13" }
+hyper = { workspace = true }
+http-body-util = { workspace = true }
+tower-service = { workspace = true }
+tower-layer = { workspace = true }
+rustls = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+pin-project-lite = { workspace = true }
+hyper-util = { workspace = true, optional = true }
+# serde
+serde = { workspace = true, features = ["derive"] }
+tokio-util = { workspace = true, features = ["io"] }
+tardis = { workspace = true, features = ["cache"] }
+
+# future
+futures-util = { workspace = true }
+
+# plugin-maintenance
+ipnet = { workspace = true, optional = true }
+
+[dev-dependencies]
+tardis = { workspace = true, features = ["cache", "test"] }
 async-compression = { version = "0.4", features = [
     "tokio",
     "gzip",
     "deflate",
     "brotli",
 ] }
-# serde
-serde = { version = "1", features = ["derive"] }
-serde_regex = "1.1.0"
-duration-str = "0.7.1"
-http-serde = "2.0.0"
-tokio-util = { version = "0.7.8", features = ["io"] }
-tardis = { workspace = true, features = ["cache"]}
-hyper-rustls = { version = "0.26" }
-hyper-util = { version = "*" }
-# future
-futures-util = { version = "*" }
-tokio-tungstenite = { version = "*" }
-
-# plugin-maintenance
-ipnet = { version = "2"}

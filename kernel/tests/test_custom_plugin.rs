@@ -1,6 +1,6 @@
 use std::{env, time::Duration, vec};
 
-use async_trait::async_trait;
+
 use hyper::header::AUTHORIZATION;
 use hyper::{Response, StatusCode};
 use serde::{Deserialize, Serialize};
@@ -14,14 +14,13 @@ use spacegate_kernel::config::{
     plugin_filter_dto::SgRouteFilter,
 };
 
-use spacegate_plugin::{def_filter_plugin, SgPluginRepository, MakeSgLayer};
+use spacegate_plugin::{def_filter_plugin, SgPluginRepository};
 use spacegate_tower::helper_layers::filter::Filter;
-use spacegate_tower::{SgBoxLayer, BoxError};
-use spacegate_tower::{helper_layers::filter::FilterRequestLayer, SgResponseExt};
+use spacegate_tower::{SgResponseExt};
+use spacegate_tower::{BoxError};
 
 use tardis::config::config_dto::WebClientModuleConfig;
 use tardis::{
-    basic::{error::TardisError, result::TardisResult},
     tokio::{self, time::sleep},
     web::web_client::TardisWebClient,
 };

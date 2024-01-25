@@ -1,3 +1,4 @@
+#![deny(clippy::unwrap_used, clippy::dbg_macro, clippy::unimplemented, clippy::todo)]
 use std::{
     collections::HashMap,
     sync::{Arc, OnceLock, RwLock},
@@ -13,6 +14,7 @@ pub use tardis::serde_json;
 pub use tardis::serde_json::{Error as SerdeJsonError, Value as JsonValue};
 
 pub use tower::BoxError;
+#[cfg(feature = "cache")]
 pub mod cache;
 pub mod model;
 pub mod plugins;
@@ -61,13 +63,21 @@ impl SgPluginRepository {
     }
 
     pub fn register_prelude(&self) {
+        #[cfg(feature = "limit")]
         self.register::<plugins::limit::RateLimitPlugin>();
+        #[cfg(feature = "redirect")]
         self.register::<plugins::redirect::RedirectPlugin>();
+        #[cfg(feature = "retry")]
         self.register::<plugins::retry::RetryPlugin>();
+        #[cfg(feature = "header-modifier")]
         self.register::<plugins::header_modifier::HeaderModifierPlugin>();
+        #[cfg(feature = "inject")]
         self.register::<plugins::inject::InjectPlugin>();
+        #[cfg(feature = "rewrite")]
         self.register::<plugins::rewrite::RewritePlugin>();
+        #[cfg(feature = "maintenance")]
         self.register::<plugins::maintenance::MaintenancePlugin>();
+        #[cfg(feature = "decompression")]
         self.register::<plugins::decompression::DecompressionPlugin>()
     }
 

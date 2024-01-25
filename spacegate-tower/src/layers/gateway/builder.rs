@@ -7,7 +7,7 @@ use crate::{
         filter::{response_anyway::ResponseAnyway, FilterRequestLayer},
         reload::Reloader,
     },
-    layers::http_route::{SgHttpRoute, SgHttpRouter},
+    layers::http_route::SgHttpRoute,
     SgBoxLayer,
 };
 
@@ -21,7 +21,6 @@ pub struct SgGatewayLayerBuilder {
     http_fallback: SgBoxLayer,
     http_route_reloader: Reloader<SgGatewayRoute>,
 }
-
 
 pub fn default_gateway_route_fallback() -> &'static SgBoxLayer {
     static LAYER: OnceLock<SgBoxLayer> = OnceLock::new();

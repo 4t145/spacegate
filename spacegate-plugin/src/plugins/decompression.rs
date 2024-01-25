@@ -7,26 +7,20 @@
 //!
 
 use std::convert::Infallible;
-use std::{cmp::Ordering, str::FromStr};
 
-// use crate::{plugin_layers::comde::content_encoding::ContentEncodingType, };
-use futures_util::FutureExt;
-use http_body_util::BodyExt;
-use hyper::header::{HeaderValue, ACCEPT_ENCODING, CONTENT_ENCODING};
 use hyper::{Request, Response};
 use serde::{Deserialize, Serialize};
 use spacegate_tower::{SgBody, SgBoxService};
-use tower::{service_fn, BoxError, ServiceExt};
-use tower_http::compression::{Compression as TowerCompression, CompressionLayer as TowerCompressionLayer};
-use tower_http::decompression::{Decompression as TowerDecompression, DecompressionLayer as TowerDecompressionLayer};
+use tower::BoxError;
+use tower_http::decompression::Decompression as TowerDecompression;
 use tower_layer::Layer;
 use tower_service::Service;
 
 use crate::{def_plugin, MakeSgLayer};
 
-pub struct ComdeLayer {}
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DecompressionConfig;
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct DecompressionConfig {}
 
 #[derive(Debug, Clone)]
 pub struct DecompressionLayer;
@@ -87,8 +81,9 @@ def_plugin!("decompression", DecompressionPlugin, DecompressionConfig);
 #[cfg(test)]
 mod test {
     use super::*;
-    use hyper::{header, HeaderMap};
+    use hyper::header::{self, CONTENT_ENCODING};
     use tardis::tokio::{self, io::AsyncWriteExt};
+    use tower::{service_fn, ServiceExt};
     pub async fn compress(req: Request<SgBody>) -> Result<Response<SgBody>, Infallible> {
         let body_data = req.into_body().dump().await.expect("dump body").get_dumped().expect("get dumped").clone();
         let mut encoder = async_compression::tokio::write::GzipEncoder::new(Vec::new());

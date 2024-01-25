@@ -1,36 +1,28 @@
+#![deny(clippy::unwrap_used, clippy::dbg_macro, clippy::unimplemented, clippy::todo)]
+
 // pub mod config;
 pub mod body;
 pub mod extension;
+pub mod header;
 pub mod helper_layers;
 pub mod layers;
 pub mod listener;
-pub mod plugin_layers;
 pub mod service;
 pub mod utils;
-pub mod header;
 
 pub use body::SgBody;
 use extension::Reflect;
-use std::{
-    convert::Infallible,
-    fmt::{self, Display},
-    sync::Arc,
-};
+use std::{convert::Infallible, fmt, sync::Arc};
 pub use tower_layer::Layer;
 pub use tower_service::Service;
 
-use body::dump::Dump;
 use helper_layers::response_error::ErrorFormatter;
-use http_body_util::{combinators::BoxBody, BodyExt, Empty, Full};
 
-use hyper::{
-    body::{Body, Bytes},
-    Error, Request, Response, StatusCode,
-};
+use hyper::{body::Bytes, Request, Response, StatusCode};
 
 use tower::util::BoxCloneService;
 use tower_layer::layer_fn;
-use utils::{fold_sg_layers::fold_sg_layers, never};
+use utils::fold_sg_layers::fold_sg_layers;
 
 pub trait SgRequestExt {
     fn with_reflect(&mut self);
