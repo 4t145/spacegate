@@ -4,4 +4,4 @@ pub mod filter;
 pub mod reload;
 pub mod response_error;
 pub mod route;
-pub mod status;
+pub mod stat;

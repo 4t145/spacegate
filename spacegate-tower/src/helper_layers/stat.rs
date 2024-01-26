@@ -5,11 +5,11 @@ use std::{convert::Infallible, sync::Arc, task::ready};
 use crate::SgBody;
 
 #[derive(Debug, Clone)]
-pub struct StatusLayer<P> {
+pub struct StatLayer<P> {
     policy: Arc<P>,
 }
 
-impl<P> StatusLayer<P> {
+impl<P> StatLayer<P> {
     pub fn new(policy: impl Into<Arc<P>>) -> Self {
         Self { policy: policy.into() }
     }
@@ -21,29 +21,29 @@ pub trait Policy {
 }
 
 #[derive(Debug, Clone)]
-pub struct Status<P, S> {
+pub struct Stat<P, S> {
     policy: Arc<P>,
     inner: S,
 }
 
-impl<P, S> Status<P, S> {
+impl<P, S> Stat<P, S> {
     pub fn new(policy: impl Into<Arc<P>>, inner: S) -> Self {
         Self { policy: policy.into(), inner }
     }
 }
 
-impl<P, S> tower_layer::Layer<S> for StatusLayer<P>
+impl<P, S> tower_layer::Layer<S> for StatLayer<P>
 where
     P: Policy + Clone,
 {
-    type Service = Status<P, S>;
+    type Service = Stat<P, S>;
 
     fn layer(&self, inner: S) -> Self::Service {
-        Status::new(self.policy.clone(), inner)
+        Stat::new(self.policy.clone(), inner)
     }
 }
 
-impl<P, S> tower_service::Service<Request<SgBody>> for Status<P, S>
+impl<P, S> tower_service::Service<Request<SgBody>> for Stat<P, S>
 where
     P: Policy,
     S: tower_service::Service<Request<SgBody>, Response = Response<SgBody>, Error = Infallible>,

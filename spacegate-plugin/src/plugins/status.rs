@@ -60,7 +60,7 @@ pub struct DefaultPolicy {
 }
 
 #[cfg(not(feature = "cache"))]
-impl spacegate_tower::helper_layers::status::Policy for DefaultPolicy {
+impl spacegate_tower::helper_layers::stat::Policy for DefaultPolicy {
     fn on_request(&self, _req: &Request<SgBody>) {
         // do nothing
     }
@@ -113,7 +113,7 @@ impl CachePolicy {
 }
 
 #[cfg(feature = "cache")]
-impl spacegate_tower::helper_layers::status::Policy for CachePolicy {
+impl spacegate_tower::helper_layers::stat::Policy for CachePolicy {
     fn on_request(&self, _req: &Request<SgBody>) {
         // do nothing
     }
@@ -179,7 +179,7 @@ impl MakeSgLayer for SgFilterStatusConfig {
                 window_cache_key: self.window_cache_key.clone().into(),
                 gateway_name,
             };
-            SgBoxLayer::new(helper_layers::status::StatusLayer::new(policy))
+            SgBoxLayer::new(helper_layers::stat::StatLayer::new(policy))
         };
         #[cfg(not(feature = "cache"))]
         let layer = {
@@ -188,7 +188,7 @@ impl MakeSgLayer for SgFilterStatusConfig {
                 counter,
                 unhealthy_threshold: self.unhealthy_threshold,
             };
-            SgBoxLayer::new(helper_layers::status::StatusLayer::new(policy))
+            SgBoxLayer::new(helper_layers::stat::StatLayer::new(policy))
         };
         Ok(gateway.http_plugin(layer))
     }
