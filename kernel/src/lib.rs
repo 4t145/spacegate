@@ -30,11 +30,11 @@ use tardis::{
     log::{self as tracing, instrument},
     tokio::signal,
 };
+mod cache_client;
 pub mod config;
 pub mod constants;
-pub mod server;
-mod cache_client;
 pub mod helpers;
+pub mod server;
 // pub mod instance;
 // pub mod plugins;
 
@@ -103,6 +103,10 @@ pub async fn shutdown(gateway_name: &str) -> Result<(), BoxError> {
 pub async fn wait_graceful_shutdown() -> TardisResult<()> {
     match signal::ctrl_c().await {
         Ok(_) => {
+            let instances = server::RunningSgGateway::global_store().lock().expect("fail to lock").drain().collect::<Vec<_>>();
+            for (_, inst) in instances {
+                inst.shutdown().await;
+            }
             tracing::info!("Received ctrl+c signal, shutting down...");
         }
         Err(error) => {

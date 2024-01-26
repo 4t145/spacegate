@@ -110,9 +110,14 @@ where
     fn layer(&self, inner: S) -> Self::Service {
         let gateway_plugins = self.http_plugins.iter().collect::<SgBoxLayer>();
         let route = create_http_router(&self.http_routes, &self.http_fallback, inner);
-        let reloader = self.http_route_reloader.clone();
-        let reload_service = reloader.into_layer().layer(route);
-        gateway_plugins.layer(reload_service)
+        #[cfg(feature = "reload")]
+        let service = {
+            let reloader = self.http_route_reloader.clone();
+            reloader.into_layer().layer(route);
+        };
+        #[cfg(not(feature = "reload"))]
+        let service = route;
+        gateway_plugins.layer(service)
     }
 }
 

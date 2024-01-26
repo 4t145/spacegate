@@ -1,12 +1,12 @@
 use futures_util::future::BoxFuture;
-use hyper::{body::Incoming, Request, Response};
+use hyper::{body::Incoming, Request, Response, StatusCode};
 use hyper_util::rt::{self, TokioIo};
 
 use std::{convert::Infallible, net::SocketAddr, sync::Arc};
 use tokio::net::TcpStream;
 use tokio_rustls::rustls;
 use tokio_util::sync::CancellationToken;
-use tower::{BoxError, ServiceExt};
+use tower::{buffer::Buffer, BoxError, ServiceExt};
 use tracing::instrument;
 
 use crate::{
@@ -21,6 +21,7 @@ pub struct SgListen<S> {
     pub socket_addr: SocketAddr,
     pub service: S,
     pub tls_cfg: Option<Arc<rustls::ServerConfig>>,
+    pub buffer_size: usize,
     pub cancel_token: CancellationToken,
     pub listener_id: String,
 }
@@ -32,28 +33,52 @@ impl<S> std::fmt::Debug for SgListen<S> {
 }
 
 impl<S> SgListen<S> {
+    /// we only have 65535 ports for a console, so it's a safe size
+    pub const DEFAULT_BUFFER_SIZE: usize = 0x10000;
     pub fn new(socket_addr: SocketAddr, service: S, cancel_token: CancellationToken, id: impl Into<String>) -> Self {
         Self {
             socket_addr,
             service,
             tls_cfg: None,
+            buffer_size: Self::DEFAULT_BUFFER_SIZE,
             cancel_token,
             listener_id: id.into(),
         }
     }
+
+    /// Set the TLS config for this listener.
+    /// see [rustls::ServerConfig](https://docs.rs/rustls/latest/rustls/server/struct.ServerConfig.html)
     pub fn with_tls_config(mut self, tls_cfg: impl Into<Arc<rustls::ServerConfig>>) -> Self {
         self.tls_cfg = Some(tls_cfg.into());
         self
     }
+
+    /// # Choosing a buffer size
+    ///
+    /// The `buffer_size` should be lager than the maximal number of concurrent requests.
+    ///
+    /// However, a too large buffer size is unreasonable. Too many requests could wait for a long time for underlying service to process.
+    pub fn buffer_size(mut self, buffer_size: usize) -> Self {
+        self.buffer_size = buffer_size;
+        self
+    }
 }
 
-#[derive(Debug, Clone)]
-pub struct HyperServiceAdapter<S> {
-    service: S,
+#[derive(Clone)]
+pub struct HyperServiceAdapter<S>
+where
+    S: tower::Service<Request<SgBody>, Error = Infallible, Response = Response<SgBody>> + Clone + Send + 'static,
+    S::Future: Send + 'static,
+{
+    service: Buffer<S, Request<SgBody>>,
     peer: SocketAddr,
 }
-impl<S> HyperServiceAdapter<S> {
-    pub fn new(service: S, peer: SocketAddr) -> Self {
+impl<S> HyperServiceAdapter<S>
+where
+    S: tower::Service<Request<SgBody>, Error = Infallible, Response = Response<SgBody>> + Clone + Send + 'static,
+    S::Future: Send + 'static,
+{
+    pub fn new(service: Buffer<S, Request<SgBody>>, peer: SocketAddr) -> Self {
         Self { service, peer }
     }
 }
@@ -77,17 +102,34 @@ where
         // so we should avoid that
         let enter_time = EnterTime::new();
         let this = self.service.clone();
-        tracing::trace!(time_used = ?enter_time.elapsed(), "underlying service cloned");
         let mut req = req.map(SgBody::new);
         let mut reflect = Reflect::default();
         reflect.insert(enter_time);
-        req.extensions_mut().insert(Reflect::default());
+        req.extensions_mut().insert(reflect);
         req.extensions_mut().insert(PeerAddr(self.peer));
         req.extensions_mut().insert(enter_time);
         Box::pin(async move {
-            let mut resp = this.ready_oneshot().await?.call(req).await?;
+            use tower::Service;
+            let mut service = match this.ready_oneshot().await {
+                Ok(service) => service,
+                Err(e) => {
+                    tracing::warn!("too many request, the underlying buffer is fulfilled {:?}", e);
+                    return Ok(Response::builder()
+                        .status(StatusCode::SERVICE_UNAVAILABLE)
+                        .body(SgBody::full("Too many requests, please try again later."))
+                        .expect("constructing invalid response"));
+                }
+            };
+            let mut resp = match service.call(req).await {
+                Ok(resp) => resp,
+                Err(e) => {
+                    tracing::error!("buffer service call error: {:?}", e);
+                    let error = e.to_string();
+                    return Ok(Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR).body(SgBody::full(error)).expect("constructing invalid response"));
+                }
+            };
             with_length_or_chunked(&mut resp);
-            tracing::trace!(time_used = ?enter_time.elapsed(), "finished");
+            tracing::trace!(time_used = ?enter_time.elapsed(), "request finished");
             Ok(resp)
         })
     }
@@ -99,7 +141,12 @@ where
     S::Future: Send + 'static,
 {
     #[instrument(skip(stream, service, tls_cfg))]
-    pub async fn accept(stream: TcpStream, peer_addr: SocketAddr, tls_cfg: Option<Arc<rustls::ServerConfig>>, service: S) -> Result<(), BoxError> {
+    async fn accept(
+        stream: TcpStream,
+        peer_addr: SocketAddr,
+        tls_cfg: Option<Arc<rustls::ServerConfig>>,
+        service: tower::buffer::Buffer<S, Request<SgBody>>,
+    ) -> Result<(), BoxError> {
         tracing::debug!("[Sg.Listen] Accepted connection");
         let builder = hyper_util::server::conn::auto::Builder::new(rt::TokioExecutor::default());
         let service = HyperServiceAdapter::new(service, peer_addr);
@@ -126,6 +173,7 @@ where
         let listener = tokio::net::TcpListener::bind(self.socket_addr).await?;
         let cancel_token = self.cancel_token;
         tracing::debug!("[Sg.Listen] start listening...");
+        let buffered = tower::buffer::Buffer::new(self.service, self.buffer_size);
         loop {
             tokio::select! {
                 _ = cancel_token.cancelled() => {
@@ -135,8 +183,8 @@ where
                 accepted = listener.accept() => {
                     match accepted {
                         Ok((stream, peer_addr)) => {
-                            let service = self.service.clone();
                             let tls_cfg = self.tls_cfg.clone();
+                            let service = buffered.clone();
                             tokio::spawn(async move {
                                 if let Err(e) = Self::accept(stream, peer_addr, tls_cfg, service).await {
                                     tracing::warn!("[Sg.Listen] Accept stream error: {:?}", e);
